@@ -616,6 +616,7 @@ if __name__ == '__main__':
     with open(os.path.join(args.logdir, argument_path), 'w') as f:
         json.dump(str(args), f)
     device = torch.device(args.device)
+    print (device)
     # logging.basicConfig(filename='test.log', level=logger.info, filemode='w')
     # logging.info("test")
     for handler in logging.root.handlers[:]:
