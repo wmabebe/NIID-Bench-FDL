@@ -615,7 +615,7 @@ if __name__ == '__main__':
         argument_path=args.log_file_name+'.json'
     with open(os.path.join(args.logdir, argument_path), 'w') as f:
         json.dump(str(args), f)
-    device = torch.device(args.device)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info('Device: %s' % str(device))
     # logging.basicConfig(filename='test.log', level=logger.info, filemode='w')
     # logging.info("test")
