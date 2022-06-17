@@ -669,6 +669,23 @@ if __name__ == '__main__':
     args = get_args()
     mkdirs(args.logdir)
     mkdirs(args.modeldir)
+
+    MAX_PEERS = args.max_peers
+    NODES = args.n_parties
+    OPPOSIT_FRAC = args.opposit_frac
+    NOW = str(datetime.datetime.now()).replace(" ","--")
+    OPPOSIT_STRATEGY = args.opposit_strategy
+    IID = args.partition
+    CLUMP_STRATEGY = args.clump
+    CLUMP_INTERVAL = args.clump_interval
+
+    #Create output directory
+    args.logdir = './logs/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_clump[{}]_clumpInterval[{}]_rounds[{}]_noniidfrac[{}]_strategy[{}]_frac[{}]_local_ep[{}]_local_bs[{}]/'. \
+        format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS,CLUMP_STRATEGY,CLUMP_INTERVAL, args.comm_round,OPPOSIT_FRAC,OPPOSIT_STRATEGY, args.sample,args.epochs, args.batch_size)
+    os.makedirs(os.path.dirname(args.logdir), exist_ok=True)
+
+    
+
     if args.log_file_name is None:
         argument_path='experiment_arguments-%s.json' % datetime.datetime.now().strftime("%Y-%m-%d-%H:%M-%S")
     else:
@@ -740,25 +757,11 @@ if __name__ == '__main__':
         test_all_in_ds = data.ConcatDataset(test_all_in_list)
         test_dl_global = data.DataLoader(dataset=test_all_in_ds, batch_size=32, shuffle=False)
 
-    MAX_PEERS = args.max_peers
-    NODES = args.n_parties
-    OPPOSIT_FRAC = args.opposit_frac
-    NOW = str(datetime.datetime.now()).replace(" ","--")
-    OPPOSIT_STRATEGY = args.opposit_strategy
-    IID = args.partition
-    CLUMP_STRATEGY = args.clump
-    CLUMP_INTERVAL = args.clump_interval
-
     if args.alg == 'fedavg':
         logger.info("Initializing nets")
         nets, local_model_meta_data, layer_type = init_nets(args.net_config, args.dropout_p, args.n_parties, args)
         # global_models, global_model_meta_data, global_layer_type = init_nets(args.net_config, 0, 1, args)
         # global_model = global_models[0]
-
-        #Create output directory
-        dir_path = './output/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_clump[{}]_clumpInterval[{}]_rounds[{}]_noniidfrac[{}]_strategy[{}]_frac[{}]_local_ep[{}]_local_bs[{}]/'. \
-            format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS,CLUMP_STRATEGY,CLUMP_INTERVAL, args.comm_round,OPPOSIT_FRAC,OPPOSIT_STRATEGY, args.sample,args.epochs, args.batch_size)
-        os.makedirs(os.path.dirname(dir_path), exist_ok=True)
 
          #Initialize the p2p graph
         adj_list = [Node(idx,net,net_dataidx_map[idx],MAX_PEERS) for idx,net in nets.items()]
@@ -771,7 +774,7 @@ if __name__ == '__main__':
         
         #Draw round 0 graph
         graph = build_graph(adj_list,nx.DiGraph())
-        fname = dir_path + "G0.png"
+        fname = args.logdir + "G0.png"
         draw_graph(graph,fname)
 
         #Edit below to initialize all peers with same random weights
@@ -824,7 +827,7 @@ if __name__ == '__main__':
             colors = color_graph(adj_list,global_gradient)
 
             #Update p2p nodes
-            ripple_updates(adj_list,round,colors,dir_path,OPPOSIT_FRAC,CLUMP_STRATEGY,CLUMP_INTERVAL,OPPOSIT_STRATEGY)
+            ripple_updates(adj_list,round,colors,args.logdir,OPPOSIT_FRAC,CLUMP_STRATEGY,CLUMP_INTERVAL,OPPOSIT_STRATEGY)
 
             avg_global_train_acc, avg_global_test_acc = 0.0, 0.0
             for idx,net in nets.items():
