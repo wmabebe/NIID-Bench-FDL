@@ -686,4 +686,19 @@ def noise_sample(choice, n_dis_c, dis_c_dim, n_con_c, n_z, batch_size, device):
 
     return noise, idx
 
+#Flatten all layers of a gradient
+def flatten_layers(gradient):
+    X_flat = np.array([])
+    for name,layer in sorted(gradient.items()):
+        cur = np.array(layer,dtype=np.float64).flatten()
+        X_flat = np.concatenate((X_flat,cur),axis=0)
+    return X_flat
+
+#Calculate the radians between two gradients
+def get_radians(g1,g2):
+    unit_vector_1 = g1 / np.linalg.norm(g1) if np.linalg.norm(g1) != 0 else 0
+    unit_vector_2 = g2 / np.linalg.norm(g2) if np.linalg.norm(g2) != 0 else 0
+    dot_product = np.dot(unit_vector_1, unit_vector_2)
+    radians = np.arccos(dot_product)
+    return radians
 

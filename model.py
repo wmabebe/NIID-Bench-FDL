@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import numpy as np
 
 
 class FcNet(nn.Module):
@@ -133,6 +134,7 @@ class SimpleCNN(nn.Module):
         self.fc1 = nn.Linear(input_dim, hidden_dims[0])
         self.fc2 = nn.Linear(hidden_dims[0], hidden_dims[1])
         self.fc3 = nn.Linear(hidden_dims[1], output_dim)
+        self.grads = {'conv1':None,'conv2':None}
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -143,6 +145,13 @@ class SimpleCNN(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
+
+    def stash_grads(self):
+        self.grads['conv1'] = np.copy(self.conv1.weight.grad.cpu().clone().numpy())
+        self.grads['conv2'] = np.copy(self.conv2.weight.grad.cpu().clone().numpy())
+        # self.grads['fc1'].append(np.copy(self.fc1.weight.grad.numpy()))
+        # self.grads['fc2'].append(np.copy(self.fc2.weight.grad.numpy()))
+        # self.grads['fc3'].append(np.copy(self.fc3.weight.grad.numpy()))
 
 
 # a simple perceptron model for generated 3D data
@@ -170,6 +179,7 @@ class SimpleCNNMNIST(nn.Module):
         self.fc1 = nn.Linear(input_dim, hidden_dims[0])
         self.fc2 = nn.Linear(hidden_dims[0], hidden_dims[1])
         self.fc3 = nn.Linear(hidden_dims[1], output_dim)
+        self.grads = {'conv1':None,'conv2':None}
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -180,6 +190,13 @@ class SimpleCNNMNIST(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
+    
+    def stash_grads(self):
+        self.grads['conv1'] = np.copy(self.conv1.weight.grad.cpu().clone().numpy())
+        self.grads['conv2'] = np.copy(self.conv2.weight.grad.cpu().clone().numpy())
+        # self.grads['fc1'].append(np.copy(self.fc1.weight.grad.numpy()))
+        # self.grads['fc2'].append(np.copy(self.fc2.weight.grad.numpy()))
+        # self.grads['fc3'].append(np.copy(self.fc3.weight.grad.numpy()))
 
 
 class SimpleCNNContainer(nn.Module):
