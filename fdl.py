@@ -831,8 +831,8 @@ if __name__ == '__main__':
 
             avg_global_train_acc, avg_global_test_acc = 0.0, 0.0
             for idx,net in nets.items():
-                avg_global_train_acc += compute_accuracy(net, train_dl_global)
-                test_acc, conf_matrix = compute_accuracy(net, test_dl_global, get_confusion_matrix=True)
+                avg_global_train_acc += compute_accuracy(net, train_dl_global,get_confusion_matrix=False, device=device)
+                test_acc, conf_matrix = compute_accuracy(net, test_dl_global, get_confusion_matrix=True, device=device)
                 avg_global_test_acc += test_acc
             
             avg_global_train_acc /= len(nets)
