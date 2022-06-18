@@ -148,7 +148,9 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
 
     for epoch in range(epochs):
         epoch_loss_collector = []
-        for tmp in train_dataloader:
+        last_td = len(train_dataloader) - 1
+        for idx,tmp in enumerate(train_dataloader):
+            last_batch = len(tmp) - 1
             for batch_idx, (x, target) in enumerate(tmp):
                 x, target = x.to(device), target.to(device)
 
@@ -162,7 +164,7 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
 
                 loss.backward()
                 #Collect grads here!
-                if epoch == epochs - 1:
+                if epoch == epochs - 1 and idx == last_td and batch_idx == last_batch:
                     net.stash_grads()
                 optimizer.step()
 
