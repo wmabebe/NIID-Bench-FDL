@@ -26,6 +26,9 @@ from config import params
 import sklearn.datasets as sk
 from sklearn.datasets import load_svmlight_file
 
+import random
+import networkx as nx
+
 logging.basicConfig()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -702,3 +705,239 @@ def get_radians(g1,g2):
     radians = np.arccos(dot_product)
     return radians
 
+#BFTM methods
+def show(matrix):
+    print("",end="  ")
+    for k in sorted(matrix.keys()):
+        print(k,end="  ")
+    
+    for i,row in sorted(matrix.items()):
+        print("\n" + str(i),end="  ")
+        for j in row:
+            print(matrix[i][j],end="  ")
+    print()
+        
+
+def size(matrix):
+    size = 0
+    for _,row in matrix.items():
+        size += len([r for r in row.values() if r != None])
+    return size
+
+def is_complete(matrix,size):
+    for _,row in matrix.items():
+        if len(row) < size:
+            return False
+    return True
+
+def exists(matrix,i,j):
+    return j in matrix[i].keys()
+
+def intersection(matrix,n1,n2):
+    inter = []
+    for n,v in matrix[n1.id].items():
+        if v == None and matrix[n2.id][n] == None:
+            inter.append(n)
+    return inter
+
+def add_entry(matrix,i,j,replace=False):
+    if j not in matrix[i].keys():
+        matrix[i][j] = abs(i - j)
+    else:
+        if replace:
+            matrix[i][j] = abs(i - j)
+
+def get_signed_radians(grad1,grad2):
+    g1 = flatten_layers(grad1)
+    g2 = flatten_layers(grad2)
+    if np.array_equal(g1, g2):
+        return 0
+    angle = -1 if g1[0]*g2[1] - g1[1]*g2[0] < 0 else 1
+    unit_vector_1 = g1 / np.linalg.norm(g1) if np.linalg.norm(g1) != 0 else 0
+    unit_vector_2 = g2 / np.linalg.norm(g2) if np.linalg.norm(g2) != 0 else 0
+    dot_product = np.dot(unit_vector_1, unit_vector_2)
+    radians = np.arccos(dot_product)
+    return radians * angle
+
+
+def update_matrix(G,M,C,adj_list):
+    for node,adj in G.adj.items():
+        for _1_hop,_ in adj.items():
+            M[node.id][_1_hop.id] = get_signed_radians(node.model.grads,_1_hop.model.grads) #node.model - _1_hop.model
+            M[_1_hop.id][node.id] = get_signed_radians(_1_hop.model.grads,node.model.grads) #_1_hop.model - node.model
+            C[node.id].add(_1_hop.id)
+            C[_1_hop.id].add(node.id)
+    for node in list(G.nodes):
+        for n_id,cache in C.items():
+            if node.id in cache and node.id != n_id:
+                for _2_hop in cache:
+                    M[node.id][_2_hop] = get_signed_radians(node.model.grads,adj_list[_2_hop].model.grads) #node.model - adj_list[_2_hop].model
+                    M[_2_hop][node.id] = get_signed_radians(adj_list[_2_hop].model.grads,node.model.grads) #adj_list[_2_hop].model - node.model
+            
+
+def BFTM(G,M,C,degree):
+    #show(M)
+    subset = [n for n in list(G.nodes) if None in M[n.id].values()]
+    print("Subset size: ",len(subset))
+    #print("SUB: ",[n.id for n in subset])
+    if not subset:
+        return G0
+    GN = nx.Graph()
+    done = [n for n in list(G.nodes) if None not in M[n.id].values()]
+    #print("DONE: ",[n.id for n in done])
+    queue = [random.choice(subset)]
+    #print("root:",queue[0].id)
+    temp = {n:[] for n in subset}
+    while len(queue) > 0 and len(done) < len(list(G.nodes)):
+        node = queue.pop(0)
+        GN.add_node(node)
+        candidates = [n for n in subset if M[node.id][n.id] == None and node not in temp[n]]
+
+        #ranks = {c:set.intersection(C[node.id],C[c.id]) for c in candidates}
+        #candidates = sorted(candidates, key=lambda x: ranks[x], reverse=False)
+
+
+        size = max(degree - len(temp[node]),0)
+        size = min(len(candidates),size)
+        next_neigbors = random.sample(candidates,size)
+
+        #next_neigbors = candidates[:size]
+        
+        
+
+        #print(node.id,"-->",str([c.id for c in candidates]),"-->",str([c.id for c in next_neigbors]))
+        temp[node] += next_neigbors
+        #Add new edges
+        for n in next_neigbors:
+            GN.add_edge(node,n)
+            temp[n].append(node)
+            temp[node].append(n)
+            if n not in queue:
+                queue.append(n)
+        done.append(node)
+        subset.remove(node)
+        if len(queue) == 0 and len(subset) > 0:
+            queue = [random.choice(subset)]
+    return GN
+
+def is_empty(clusters):
+    for _,cluster in clusters.items():
+        if len(cluster) > 0:
+            return False
+    return True
+
+def clique_the_cliques(cliques,labels,G):
+    #Clique the cliques
+    for idx1,clique1 in enumerate(cliques):
+        for idx2,clique2 in enumerate(cliques):
+            if idx1 < idx2:
+                n1 = random.choice(clique1)
+                candidates = [n for n in clique2 if labels[n.id] != labels[n1.id]]
+                if candidates:
+                    n2 = random.choice(candidates)
+                    G.add_edge(n1,n2)
+                else:
+                    break
+
+def cliques_on_ring(cliques,labels,G):
+    n1 = random.choice(cliques[0]) 
+    for idx,clique in enumerate(cliques):
+        if idx > 0:
+            candidates = [n for n in clique if labels[n.id] != labels[n1.id]]
+            candidates = candidates if len(candidates) > 0 else clique
+            n2 = random.choice(candidates)
+            G.add_edge(n1,n2)
+            n1 = random.choice(clique)
+    
+    #Attach head and tail
+    candidates = [n for n in cliques[0] if labels[n.id] != labels[n1.id]]
+    candidates = candidates if len(candidates) > 0 else cliques[0]
+    n2 = random.choice(candidates)
+    G.add_edge(n1,n2)
+
+def m_cliques(adj_list,labels,topology="clique"):
+    G_cliques = nx.Graph()
+    num_clusters = list(np.unique(labels))
+    clusters = {i:[] for i in num_clusters}
+    hood = {n.id:[i for i in num_clusters if i != labels[n.id]] for n in adj_list}
+    
+    #Add nodes to clusters
+    for idx,n in enumerate(adj_list):
+        clusters[labels[idx]].append(n)
+    
+    cliques = []
+    while not is_empty(clusters):
+        clique = []
+        
+        #Add clique nodes
+        for _,cluster in clusters.items():
+            if len(cluster) > 0:
+                n = random.choice(cluster)
+                clique.append(n)
+                cluster.remove(n)
+        
+        #Cliqify
+        for n1 in clique:
+            for n2 in clique:
+                if n1 != n2:
+                    G_cliques.add_edge(n1,n2)
+        
+        #Aggregate clique
+        cliques.append(clique)
+    
+    if topology == "clique":
+        clique_the_cliques(cliques,labels,G_cliques)
+    elif topology == "ring":
+        cliques_on_ring(cliques,labels,G_cliques)
+    
+    return G_cliques
+    
+def BFTM_(adj_list,labels):
+    G_prime = nx.Graph()
+    num_clusters = list(np.unique(labels))
+    clusters = {i:[] for i in num_clusters}
+    hood = {n.id:[i for i in num_clusters if i != labels[n.id]] for n in adj_list}
+    
+    #Add nodes to clusters
+    for idx,n in enumerate(adj_list):
+        clusters[labels[idx]].append(n.id)
+    
+    root_cluster = random.choice(num_clusters)
+    root_id = random.choice(list(clusters[root_cluster]))
+    queue = [adj_list[root_id]]
+    clusters[labels[root_id]].remove(root_id)
+        
+        
+    #BFTM
+    while len(queue) > 0:
+        node = queue.pop(0)
+        for c_id in hood[node.id]:
+            if len(clusters[c_id]) > 0:
+                sample_id = random.choice(clusters[c_id])
+                clusters[labels[sample_id]].remove(sample_id)
+                queue.append(adj_list[sample_id])
+                hood[sample_id].remove(labels[node.id])
+                G_prime.add_edge(node,adj_list[sample_id])
+        hood[node.id] = None
+        #Handle leftover nodes
+        if len(queue) == 0:
+            remaining = [c for i,c in clusters.items() if len(c) > 0]
+            for rem_cluster in remaining:
+                for n in rem_cluster:
+                    added = false
+                    while not added:
+                        rand_n = random.choice(list(G_prime.nodes))
+                        if labels[rand_n.id] != labels[n.id]:
+                            G_prime.add_edge(n,rand_n)
+                            added = True
+        
+    
+    #Cliqify
+    for node in list(G_prime.nodes):
+        if G_prime.degree(node) < len(num_clusters) - 1:
+            for _1_hop in list(G_prime.neighbors(node)):
+                for _2_hop in list(G_prime.neighbors(_1_hop)):
+                    if _2_hop != node and G_prime.degree(_2_hop) < len(num_clusters) - 1:
+                        G_prime.add_edge(node,_2_hop)
+    
+    return G_prime

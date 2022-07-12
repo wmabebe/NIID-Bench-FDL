@@ -13,6 +13,12 @@ import os
 import copy
 from math import *
 import random
+import networkx as nx
+import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+
 
 import datetime
 #from torch.utils.tensorboard import SummaryWriter
@@ -22,6 +28,7 @@ from utils import *
 from vggmodel import *
 from resnetcifar import *
 from node import *
+
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -52,11 +59,8 @@ def get_args():
     parser.add_argument('--noise_type', type=str, default='level', help='Different level of noise or different space of noise')
     parser.add_argument('--rho', type=float, default=0, help='Parameter controlling the momentum SGD')
     parser.add_argument('--sample', type=float, default=1, help='Sample ratio for each communication round')
-    parser.add_argument('--max_peers',type=int, default=3, help='Max number of peers')
-    parser.add_argument('--opposit_frac',type=float, default=0.0, help='Fraction of dissimilar peers')
-    parser.add_argument('--opposit_strategy',type=str, default="random", help='Dissimilarity strategy')
-    parser.add_argument('--clump',type=str, default="static", help='Clumping strategy')
-    parser.add_argument('--clump_interval',type=int, default=1, help='Clumping interval')
+    parser.add_argument('--topology',type=str, default="tree", help='Node graph topology default=tree, options (ring, clique)')
+    parser.add_argument('--strategy',type=str, default="rand", help='Clumping strategy default=rand, options (optim)')
     args = parser.parse_args()
     return args
 
@@ -278,6 +282,29 @@ def view_image(train_dataloader):
         print(x.shape)
         exit(0)
 
+def local_pre_training(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
+    for net_id, net in nets.items():
+        if net_id not in selected:
+            continue
+        dataidxs = net_dataidx_map[net_id]
+
+        # move the model to cuda device:
+        net.to(device)
+
+        noise_level = args.noise
+        if net_id == args.n_parties - 1:
+            noise_level = 0
+
+        if args.noise_type == 'space':
+            train_dl_local, test_dl_local, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32, dataidxs, noise_level, net_id, args.n_parties-1)
+        else:
+            noise_level = args.noise / (args.n_parties - 1) * net_id
+            train_dl_local, test_dl_local, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32, dataidxs, noise_level)
+        train_dl_global, test_dl_global, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32)
+        n_epoch = args.epochs
+
+        #Pre train for 10 epochs
+        _, _ = train_net(net_id, net, train_dl_local, test_dl, 1, args.lr, args.optimizer, device=device)
 
 def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
     avg_acc = 0.0
@@ -638,33 +665,20 @@ def average_weights(w,weights=None):
         w_avg[key] = torch.div(w_avg[key], len(w))
     return w_avg
 
-def ripple_updates(adj_list,global_epoch,colors,dir_path=None,
-    NON_IID_FRAC=None,CLUMP_STRATEGY="static",CLUMP_INTERVAL=10,OPPOSIT_STRATEGY="random"):
-    
-    #If clumping applied
-    if CLUMP_STRATEGY == "dynamic" and (global_epoch + 1) % CLUMP_INTERVAL == 0:
-        #Pick next candidates
-        for node in adj_list:
-            node.next_candidates()
-
-    #Ripple updates with 1-hop neighbors
-    for node in adj_list:
+#Ripple updates with 1-hop neighbors
+def ripple_updates(G):
+    #Compute vicinity weights for all nodes
+    weight_updates = {n:None for n in list(G.nodes)}
+    for node in list(G.nodes):
         vicinity_weights = [copy.deepcopy(node.model.state_dict())]
-        for neighbor in node.neighbors:
+        for neighbor,_ in G.adj[node].items():
             vicinity_weights.append(copy.deepcopy(neighbor.model.state_dict()))
         vicinity_weights = average_weights(vicinity_weights)
-        node.model.load_state_dict(vicinity_weights)
-
-    #If clumping applied
-    if CLUMP_STRATEGY == "dynamic" and (global_epoch + 1) % CLUMP_INTERVAL == 0:
-        #Update next neighbors
-        for node in adj_list:
-            node.next_peers(non_iid_frac=NON_IID_FRAC,non_iid_strategy=OPPOSIT_STRATEGY)
-        
-        #Draw round graph
-        graph = build_graph(adj_list,nx.DiGraph())
-        fname = dir_path + "G" + str(global_epoch + 1) + ".png" if dir_path != None else "G" + str(global_epoch + 1) + ".png"
-        draw_graph(graph,fname,colors)
+        weight_updates[node] = vicinity_weights
+    
+    #Update vicinity weights
+    for node,weight in weight_updates.items():
+        node.model.load_state_dict(weight)
 
 if __name__ == '__main__':
     # torch.set_printoptions(profile="full")
@@ -672,18 +686,21 @@ if __name__ == '__main__':
     mkdirs(args.logdir)
     mkdirs(args.modeldir)
 
-    MAX_PEERS = args.max_peers
     NODES = args.n_parties
-    OPPOSIT_FRAC = args.opposit_frac
+    MAX_PEERS = math.ceil(math.log(NODES,2))
+    SIM_MATRIX = {i:{j: 0 if i == j else None for j in range(NODES)} for i in range(NODES)}
+    TOPOLOGY = args.topology
+    STRATEGY = args.strategy
     NOW = str(datetime.datetime.now()).replace(" ","--")
-    OPPOSIT_STRATEGY = args.opposit_strategy
     IID = args.partition
-    CLUMP_STRATEGY = args.clump
-    CLUMP_INTERVAL = args.clump_interval
+
+    #Create random template graph
+    GT = nx.random_regular_graph(d=MAX_PEERS, n=NODES)
+
 
     #Create output directory
-    args.logdir = './logs/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_clump[{}]_clumpInterval[{}]_rounds[{}]_noniidfrac[{}]_strategy[{}]_frac[{}]_local_ep[{}]_local_bs[{}]/'. \
-        format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS,CLUMP_STRATEGY,CLUMP_INTERVAL, args.comm_round,OPPOSIT_FRAC,OPPOSIT_STRATEGY, args.sample,args.epochs, args.batch_size)
+    args.logdir = './logs/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_rounds[{}]_strategy[{}]_frac[{}]_local_ep[{}]_local_bs[{}]/'. \
+        format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS, args.comm_round,STRATEGY, args.sample,args.epochs, args.batch_size)
     os.makedirs(os.path.dirname(args.logdir), exist_ok=True)
 
     
@@ -768,17 +785,98 @@ if __name__ == '__main__':
          #Initialize the p2p graph
         adj_list = [Node(idx,net,net_dataidx_map[idx],MAX_PEERS) for idx,net in nets.items()]
 
-        for idx,node in enumerate(adj_list):
-            while len(node.neighbors) < MAX_PEERS:
-                node.add_neighbors(random.sample(adj_list,MAX_PEERS))
-                if node in node.neighbors:
-                    node.neighbors = []
-        
-        #Draw round 0 graph
-        graph = build_graph(adj_list,nx.DiGraph())
-        fname = args.logdir + "G0.png"
-        draw_graph(graph,fname)
+        #Initialize node caches
+        CACHE = {n.id:set() for n in adj_list}
 
+        #Construct G0 using the template graph
+        G0 = nx.Graph()
+        for u,v in GT.edges:
+            G0.add_edge(adj_list[u],adj_list[v])
+        
+        #Pretrain selected nodes to compute local gradients for 10 epochs
+        arr = np.arange(args.n_parties)
+        np.random.shuffle(arr)
+        selected = arr[:int(args.n_parties * args.sample)]
+        local_pre_training(nets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
+
+        #Topology morphing
+        update_matrix(G0,SIM_MATRIX,CACHE,adj_list)
+
+        count = 1
+        while size(SIM_MATRIX) < NODES ** 2:
+            print("\nMATRIX i="+ str(count) +": size=",size(SIM_MATRIX))
+            G0 = BFTM(G0,SIM_MATRIX,CACHE,MAX_PEERS)
+            update_matrix(G0,SIM_MATRIX,CACHE,adj_list)
+            count += 1
+
+        #show(SIM_MATRIX)
+        print("\nFINAL MATRIX i="+ str(count - 1) +": size=",size(SIM_MATRIX))
+
+        matrix = []
+        for _,row1 in sorted(SIM_MATRIX.items()):
+            temp = []
+            for val,row2 in sorted(row1.items()):
+                temp.append(row2)
+            matrix.append(temp)
+
+        #print(matrix)
+        matrix = np.array(matrix)
+        print("matrix.shape:",matrix.shape)
+
+        print("Clustering sim matrix...")
+        #Cluster peers
+        kmeans = KMeans(n_clusters=MAX_PEERS, random_state=0).fit(matrix)
+
+        labels = {i:[] for i in range(MAX_PEERS)}
+        for idx,label in enumerate(kmeans.labels_):
+            labels[label].append(adj_list[idx])
+
+        print("Labels:")
+        for k,v in labels.items():
+            print("\t",k,":",len(v))
+        print("\tTotal:",len(kmeans.labels_))
+
+        #Plot clusters
+        pca = PCA(2)
+        print("matrix.shape",matrix.shape)
+        x_rads = matrix
+        print("x_rads.shape:",x_rads.shape)
+        df_rads = pca.fit_transform(x_rads)
+        print("df_rads.shape",df_rads.shape)
+        label_rads = kmeans.labels_
+        print("label_rads.shape",label_rads.shape)
+        u_labels_rads = np.unique(label_rads)
+        for i in u_labels_rads:
+            plt.scatter(df_rads[label_rads == i , 0] , df_rads[label_rads == i , 1] , label = i)
+        plt.legend()
+        plt.savefig(args.logdir + "kmeans.png")
+        plt.show()
+
+        #Generate random labels for random strategy
+        rand_labels = [i for i in list(kmeans.labels_)]
+        random.shuffle(rand_labels)
+
+        #Construct tree
+        if TOPOLOGY == "tree":
+            if STRATEGY == "rand":
+                G0 = BFTM_(adj_list,rand_labels)
+            else:
+                G0 = BFTM_(adj_list,list(kmeans.labels_))
+        elif TOPOLOGY == "clique":
+            if STRATEGY == "rand":
+                G0 = m_cliques(adj_list,rand_labels)
+            else:
+                G0 = m_cliques(adj_list,list(kmeans.labels_))
+        else:
+            if STRATEGY == "rand":
+                G0 = m_cliques(adj_list,rand_labels,"ring")
+            else:
+                G0 = m_cliques(adj_list,list(kmeans.labels_),"ring")
+
+        nx.draw(G0,node_color=[kmeans.labels_[n.id]/len(kmeans.labels_) for n in list(G0.nodes)])
+        plt.savefig(args.logdir + "graph.png")
+        plt.show()
+        
         #Edit below to initialize all peers with same random weights
         # global_para = global_model.state_dict()
         # if args.is_same_initial:
@@ -825,11 +923,8 @@ if __name__ == '__main__':
             #Compute average global gradient for computing node colors/similarity
             global_gradient = average_gradients([net.grads for idx,net in nets.items()])
 
-            #Color nodes
-            colors = color_graph(adj_list,global_gradient)
-
             #Update p2p nodes
-            ripple_updates(adj_list,round,colors,args.logdir,OPPOSIT_FRAC,CLUMP_STRATEGY,CLUMP_INTERVAL,OPPOSIT_STRATEGY)
+            ripple_updates(G0)
 
             avg_global_train_acc, avg_global_test_acc = 0.0, 0.0
             for idx,net in nets.items():
