@@ -304,7 +304,7 @@ def local_pre_training(nets, selected, args, net_dataidx_map, test_dl = None, de
         n_epoch = args.epochs
 
         #Pre train for 10 epochs
-        _, _ = train_net(net_id, net, train_dl_local, test_dl, 1, args.lr, args.optimizer, device=device)
+        _, _ = train_net(net_id, net, train_dl_local, test_dl, 10, args.lr, args.optimizer, device=device)
 
 def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
     avg_acc = 0.0
@@ -699,8 +699,8 @@ if __name__ == '__main__':
 
 
     #Create output directory
-    args.logdir = './logs/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_rounds[{}]_strategy[{}]_frac[{}]_local_ep[{}]_local_bs[{}]/'. \
-        format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS, args.comm_round,STRATEGY, args.sample,args.epochs, args.batch_size)
+    args.logdir = './logs/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_rounds[{}]_topology[{}]_strategy[{}]_frac[{}]_local_ep[{}]_local_bs[{}]/'. \
+        format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS, args.comm_round,TOPOLOGY,STRATEGY, args.sample,args.epochs, args.batch_size)
     os.makedirs(os.path.dirname(args.logdir), exist_ok=True)
 
     
