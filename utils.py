@@ -781,7 +781,7 @@ def BFTM(G,M,C,degree):
     print("Subset size: ",len(subset))
     #print("SUB: ",[n.id for n in subset])
     if not subset:
-        return G0
+        return G
     GN = nx.Graph()
     done = [n for n in list(G.nodes) if None not in M[n.id].values()]
     #print("DONE: ",[n.id for n in done])
@@ -924,7 +924,7 @@ def BFTM_(adj_list,labels):
             remaining = [c for i,c in clusters.items() if len(c) > 0]
             for rem_cluster in remaining:
                 for n in rem_cluster:
-                    added = false
+                    added = False
                     while not added:
                         rand_n = random.choice(list(G_prime.nodes))
                         if labels[rand_n.id] != labels[n.id]:
