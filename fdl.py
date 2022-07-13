@@ -687,7 +687,7 @@ if __name__ == '__main__':
     mkdirs(args.modeldir)
 
     NODES = args.n_parties
-    MAX_PEERS = math.ceil(math.log(NODES,2))
+    MAX_PEERS = NODES - 1 if args.topology == "complete" else math.ceil(math.log(NODES,2))
     SIM_MATRIX = {i:{j: 0 if i == j else None for j in range(NODES)} for i in range(NODES)}
     TOPOLOGY = args.topology
     STRATEGY = args.strategy
@@ -782,7 +782,7 @@ if __name__ == '__main__':
         # global_models, global_model_meta_data, global_layer_type = init_nets(args.net_config, 0, 1, args)
         # global_model = global_models[0]
 
-         #Initialize the p2p graph
+        #Initialize the p2p graph
         adj_list = [Node(idx,net,net_dataidx_map[idx],MAX_PEERS) for idx,net in nets.items()]
 
         #Initialize node caches
@@ -793,89 +793,90 @@ if __name__ == '__main__':
         for u,v in GT.edges:
             G0.add_edge(adj_list[u],adj_list[v])
         
-        #Pretrain selected nodes to compute local gradients for 10 epochs
-        arr = np.arange(args.n_parties)
-        np.random.shuffle(arr)
-        selected = arr[:int(args.n_parties * args.sample)]
-        local_pre_training(nets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
+        if TOPOLOGY != "complete":
+            #Pretrain selected nodes to compute local gradients for 10 epochs
+            arr = np.arange(args.n_parties)
+            np.random.shuffle(arr)
+            selected = arr[:int(args.n_parties * args.sample)]
+            local_pre_training(nets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
 
-        #Topology morphing
-        update_matrix(G0,SIM_MATRIX,CACHE,adj_list)
-
-        count = 1
-        while size(SIM_MATRIX) < NODES ** 2:
-            print("\nMATRIX i="+ str(count) +": size=",size(SIM_MATRIX))
-            G0 = BFTM(G0,SIM_MATRIX,CACHE,MAX_PEERS)
+            #Topology morphing
             update_matrix(G0,SIM_MATRIX,CACHE,adj_list)
-            count += 1
 
-        #show(SIM_MATRIX)
-        print("\nFINAL MATRIX i="+ str(count - 1) +": size=",size(SIM_MATRIX))
+            count = 1
+            while size(SIM_MATRIX) < NODES ** 2:
+                print("\nMATRIX i="+ str(count) +": size=",size(SIM_MATRIX))
+                G0 = BFTM(G0,SIM_MATRIX,CACHE,MAX_PEERS)
+                update_matrix(G0,SIM_MATRIX,CACHE,adj_list)
+                count += 1
 
-        matrix = []
-        for _,row1 in sorted(SIM_MATRIX.items()):
-            temp = []
-            for val,row2 in sorted(row1.items()):
-                temp.append(row2)
-            matrix.append(temp)
+            #show(SIM_MATRIX)
+            print("\nFINAL MATRIX i="+ str(count - 1) +": size=",size(SIM_MATRIX))
 
-        #print(matrix)
-        matrix = np.array(matrix)
-        print("matrix.shape:",matrix.shape)
+            matrix = []
+            for _,row1 in sorted(SIM_MATRIX.items()):
+                temp = []
+                for val,row2 in sorted(row1.items()):
+                    temp.append(row2)
+                matrix.append(temp)
 
-        print("Clustering sim matrix...")
-        #Cluster peers
-        kmeans = KMeans(n_clusters=MAX_PEERS, random_state=0).fit(matrix)
+            #print(matrix)
+            matrix = np.array(matrix)
+            print("matrix.shape:",matrix.shape)
 
-        labels = {i:[] for i in range(MAX_PEERS)}
-        for idx,label in enumerate(kmeans.labels_):
-            labels[label].append(adj_list[idx])
+            print("Clustering sim matrix...")
+            #Cluster peers
+            kmeans = KMeans(n_clusters=MAX_PEERS, random_state=0).fit(matrix)
 
-        print("Labels:")
-        for k,v in labels.items():
-            print("\t",k,":",len(v))
-        print("\tTotal:",len(kmeans.labels_))
+            labels = {i:[] for i in range(MAX_PEERS)}
+            for idx,label in enumerate(kmeans.labels_):
+                labels[label].append(adj_list[idx])
 
-        #Plot clusters
-        pca = PCA(2)
-        print("matrix.shape",matrix.shape)
-        x_rads = matrix
-        print("x_rads.shape:",x_rads.shape)
-        df_rads = pca.fit_transform(x_rads)
-        print("df_rads.shape",df_rads.shape)
-        label_rads = kmeans.labels_
-        print("label_rads.shape",label_rads.shape)
-        u_labels_rads = np.unique(label_rads)
-        for i in u_labels_rads:
-            plt.scatter(df_rads[label_rads == i , 0] , df_rads[label_rads == i , 1] , label = i)
-        plt.legend()
-        plt.savefig(args.logdir + "kmeans.png")
-        plt.show()
+            print("Labels:")
+            for k,v in labels.items():
+                print("\t",k,":",len(v))
+            print("\tTotal:",len(kmeans.labels_))
 
-        #Generate random labels for random strategy
-        rand_labels = [i for i in list(kmeans.labels_)]
-        random.shuffle(rand_labels)
+            #Plot clusters
+            pca = PCA(2)
+            print("matrix.shape",matrix.shape)
+            x_rads = matrix
+            print("x_rads.shape:",x_rads.shape)
+            df_rads = pca.fit_transform(x_rads)
+            print("df_rads.shape",df_rads.shape)
+            label_rads = kmeans.labels_
+            print("label_rads.shape",label_rads.shape)
+            u_labels_rads = np.unique(label_rads)
+            for i in u_labels_rads:
+                plt.scatter(df_rads[label_rads == i , 0] , df_rads[label_rads == i , 1] , label = i)
+            plt.legend()
+            plt.savefig(args.logdir + "kmeans.png")
+            #plt.show()
 
-        #Construct tree
-        if TOPOLOGY == "tree":
-            if STRATEGY == "rand":
-                G0 = BFTM_(adj_list,rand_labels)
+            #Generate random labels for random strategy
+            rand_labels = [i for i in list(kmeans.labels_)]
+            random.shuffle(rand_labels)
+
+            #Construct tree
+            if TOPOLOGY == "tree":
+                if STRATEGY == "rand":
+                    G0 = BFTM_(adj_list,rand_labels)
+                else:
+                    G0 = BFTM_(adj_list,list(kmeans.labels_))
+            elif TOPOLOGY == "clique":
+                if STRATEGY == "rand":
+                    G0 = m_cliques(adj_list,rand_labels)
+                else:
+                    G0 = m_cliques(adj_list,list(kmeans.labels_))
             else:
-                G0 = BFTM_(adj_list,list(kmeans.labels_))
-        elif TOPOLOGY == "clique":
-            if STRATEGY == "rand":
-                G0 = m_cliques(adj_list,rand_labels)
-            else:
-                G0 = m_cliques(adj_list,list(kmeans.labels_))
-        else:
-            if STRATEGY == "rand":
-                G0 = m_cliques(adj_list,rand_labels,"ring")
-            else:
-                G0 = m_cliques(adj_list,list(kmeans.labels_),"ring")
+                if STRATEGY == "rand":
+                    G0 = m_cliques(adj_list,rand_labels,"ring")
+                else:
+                    G0 = m_cliques(adj_list,list(kmeans.labels_),"ring")
 
         nx.draw(G0,node_color=[kmeans.labels_[n.id]/len(kmeans.labels_) for n in list(G0.nodes)])
         plt.savefig(args.logdir + "graph.png")
-        plt.show()
+        #plt.show()
         
         #Edit below to initialize all peers with same random weights
         # global_para = global_model.state_dict()
