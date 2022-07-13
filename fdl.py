@@ -851,6 +851,7 @@ if __name__ == '__main__':
                 plt.scatter(df_rads[label_rads == i , 0] , df_rads[label_rads == i , 1] , label = i)
             plt.legend()
             plt.savefig(args.logdir + "kmeans.png")
+            plt.close()
             #plt.show()
 
             #Generate random labels for random strategy
