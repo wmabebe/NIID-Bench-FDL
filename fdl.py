@@ -124,7 +124,7 @@ def init_nets(net_configs, dropout_p, n_parties, args):
     return nets, model_meta_data, layer_type
 
 
-def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_optimizer, device="cpu"):
+def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_optimizer, device="cpu",stash=False):
     logger.info('Training network %s' % str(net_id))
 
     train_acc = compute_accuracy(net, train_dataloader, device=device)
@@ -167,8 +167,8 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
                 loss = criterion(out, target)
 
                 loss.backward()
-                #Collect grads here!
-                if epoch == epochs - 1 and idx == last_td and batch_idx == last_batch:
+                #Collect grads here if in pretraining (stash) mode!
+                if stash and epoch == epochs - 1 and idx == last_td and batch_idx == last_batch:
                     net.stash_grads()
                 optimizer.step()
 
@@ -304,7 +304,7 @@ def local_pre_training(nets, selected, args, net_dataidx_map, test_dl = None, de
         n_epoch = args.epochs
 
         #Pre train for 10 epochs
-        _, _ = train_net(net_id, net, train_dl_local, test_dl, 10, args.lr, args.optimizer, device=device)
+        _, _ = train_net(net_id, net, train_dl_local, test_dl, 10, args.lr, args.optimizer, device=device, stash=True)
 
 def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
     avg_acc = 0.0
@@ -793,6 +793,8 @@ if __name__ == '__main__':
         for u,v in GT.edges:
             G0.add_edge(adj_list[u],adj_list[v])
         
+        print("TOPOLOGY:",TOPOLOGY)
+        
         if TOPOLOGY != "complete":
             #Pretrain selected nodes to compute local gradients for 10 epochs
             arr = np.arange(args.n_parties)
@@ -875,9 +877,11 @@ if __name__ == '__main__':
                 else:
                     G0 = m_cliques(adj_list,list(kmeans.labels_),"ring")
 
-        nx.draw(G0,node_color=[kmeans.labels_[n.id]/len(kmeans.labels_) for n in list(G0.nodes)])
-        plt.savefig(args.logdir + "graph.png")
-        #plt.show()
+            nx.draw(G0,node_color=[kmeans.labels_[n.id]/len(kmeans.labels_) for n in list(G0.nodes)])
+            plt.savefig(args.logdir + "graph.png")
+        else:
+            nx.draw(G0)
+            plt.savefig(args.logdir + "graph.png")
         
         #Edit below to initialize all peers with same random weights
         # global_para = global_model.state_dict()
