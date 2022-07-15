@@ -721,7 +721,9 @@ def show(matrix):
 def size(matrix):
     size = 0
     for _,row in matrix.items():
-        size += len([r for r in row.values() if r != None])
+        #size += len([r for r in row.values() if r != None])
+        for _,v in row.items():
+            size += 1 if v != None else 0
     return size
 
 def is_complete(matrix,size):

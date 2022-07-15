@@ -926,9 +926,6 @@ if __name__ == '__main__':
             logger.info('global n_training: %d' % len(train_dl_global))
             logger.info('global n_test: %d' % len(test_dl_global))
 
-            #Compute average global gradient for computing node colors/similarity
-            global_gradient = average_gradients([net.grads for idx,net in nets.items()])
-
             #Update p2p nodes
             ripple_updates(G0)
 
