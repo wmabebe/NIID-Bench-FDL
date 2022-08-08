@@ -162,7 +162,7 @@ class PerceptronModel(nn.Module):
         self.fc1 = nn.Linear(input_dim, output_dim)
 
     def forward(self, x):
-
+ 
         x = self.fc1(x)
         return x
 

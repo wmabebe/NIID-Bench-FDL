@@ -760,6 +760,8 @@ def get_signed_radians(grad1,grad2):
     unit_vector_2 = g2 / np.linalg.norm(g2) if np.linalg.norm(g2) != 0 else 0
     dot_product = np.dot(unit_vector_1, unit_vector_2)
     radians = np.arccos(dot_product)
+    if isinstance(radians,list):
+        print("BUGGY angle: ",radians)
     return radians * angle
 
 
