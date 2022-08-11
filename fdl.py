@@ -61,6 +61,7 @@ def get_args():
     parser.add_argument('--sample', type=float, default=1, help='Sample ratio for each communication round')
     parser.add_argument('--topology',type=str, default="tree", help='Node graph topology default=tree, options (ring, clique)')
     parser.add_argument('--strategy',type=str, default="rand", help='Clumping strategy default=rand, options (optim)')
+    parser.add_argument('--similarity',type=str, default="grad", help='Similarity computation default=grad, options (param)')
     args = parser.parse_args()
     return args
 
@@ -693,6 +694,7 @@ if __name__ == '__main__':
     STRATEGY = args.strategy
     NOW = str(datetime.datetime.now()).replace(" ","--")
     IID = args.partition
+    SIMILARITY = args.similarity
 
     #Create random template graph
     GT = nx.random_regular_graph(d=MAX_PEERS, n=NODES)
@@ -809,7 +811,7 @@ if __name__ == '__main__':
             while size(SIM_MATRIX) < NODES ** 2:
                 print("\nMATRIX i="+ str(count) +": size=",size(SIM_MATRIX))
                 G0 = BFTM(G0,SIM_MATRIX,CACHE,MAX_PEERS)
-                update_matrix(G0,SIM_MATRIX,CACHE,adj_list)
+                update_matrix(G0,SIM_MATRIX,CACHE,adj_list,sim=SIMILARITY)
                 count += 1
 
             #show(SIM_MATRIX)

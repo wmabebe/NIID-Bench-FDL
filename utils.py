@@ -750,6 +750,19 @@ def add_entry(matrix,i,j,replace=False):
         if replace:
             matrix[i][j] = abs(i - j)
 
+def model_similarity(m1,m2,with_data=False):
+    if m1 == m2:
+        return 0
+    if with_data:
+        #ToDo: Implement ModDiff
+        pass
+    else:
+        loss,count = 0,0
+        for paramA, paramB in zip(m1.parameters(), m2.parameters()):
+            loss += torch.sum(torch.abs(paramA.detach() - paramB))
+            count += 1
+        return loss/count
+
 def get_signed_radians(grad1,grad2):
     g1 = flatten_layers(grad1)
     g2 = flatten_layers(grad2)
@@ -765,19 +778,27 @@ def get_signed_radians(grad1,grad2):
     return radians * angle
 
 
-def update_matrix(G,M,C,adj_list):
+def update_matrix(G,M,C,adj_list,sim="grad",with_data=False):
     for node,adj in G.adj.items():
         for _1_hop,_ in adj.items():
-            M[node.id][_1_hop.id] = get_signed_radians(node.model.grads,_1_hop.model.grads) #node.model - _1_hop.model
-            M[_1_hop.id][node.id] = get_signed_radians(_1_hop.model.grads,node.model.grads) #_1_hop.model - node.model
+            if sim == "grad":
+                M[node.id][_1_hop.id] = get_signed_radians(node.model.grads,_1_hop.model.grads) #node.model - _1_hop.model
+                M[_1_hop.id][node.id] = get_signed_radians(_1_hop.model.grads,node.model.grads) #_1_hop.model - node.model
+            elif sim == "param":
+                M[node.id][_1_hop.id] = model_similarity(node.model,_1_hop.model,with_data) #node.model - _1_hop.model
+                M[_1_hop.id][node.id] = model_similarity(_1_hop.model,node.model,with_data) #_1_hop.model - node.model
             C[node.id].add(_1_hop.id)
             C[_1_hop.id].add(node.id)
     for node in list(G.nodes):
         for n_id,cache in C.items():
             if node.id in cache and node.id != n_id:
                 for _2_hop in cache:
-                    M[node.id][_2_hop] = get_signed_radians(node.model.grads,adj_list[_2_hop].model.grads) #node.model - adj_list[_2_hop].model
-                    M[_2_hop][node.id] = get_signed_radians(adj_list[_2_hop].model.grads,node.model.grads) #adj_list[_2_hop].model - node.model
+                    if sim == "grad":
+                        M[node.id][_2_hop] = get_signed_radians(node.model.grads,adj_list[_2_hop].model.grads) #node.model - adj_list[_2_hop].model
+                        M[_2_hop][node.id] = get_signed_radians(adj_list[_2_hop].model.grads,node.model.grads) #adj_list[_2_hop].model - node.model
+                    elif sim == "param":
+                        M[node.id][_1_hop.id] = model_similarity(node.model,_2_hop.model,with_data) #node.model - _1_hop.model
+                        M[_1_hop.id][node.id] = model_similarity(_2_hop.model,node.model,with_data) #_1_hop.model - node.model
             
 
 def BFTM(G,M,C,degree):
