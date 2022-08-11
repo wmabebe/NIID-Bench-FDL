@@ -797,8 +797,8 @@ def update_matrix(G,M,C,adj_list,sim="grad",with_data=False):
                         M[node.id][_2_hop] = get_signed_radians(node.model.grads,adj_list[_2_hop].model.grads) #node.model - adj_list[_2_hop].model
                         M[_2_hop][node.id] = get_signed_radians(adj_list[_2_hop].model.grads,node.model.grads) #adj_list[_2_hop].model - node.model
                     elif sim == "param":
-                        M[node.id][_1_hop.id] = model_similarity(node.model,_2_hop.model,with_data) #node.model - _1_hop.model
-                        M[_1_hop.id][node.id] = model_similarity(_2_hop.model,node.model,with_data) #_1_hop.model - node.model
+                        M[node.id][_1_hop.id] = model_similarity(node.model,adj_list[_2_hop].model,with_data) #node.model - _1_hop.model
+                        M[_1_hop.id][node.id] = model_similarity(adj_list[_2_hop].model,node.model,with_data) #_1_hop.model - node.model
             
 
 def BFTM(G,M,C,degree):
