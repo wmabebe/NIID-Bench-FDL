@@ -825,7 +825,7 @@ if __name__ == '__main__':
                 matrix.append(temp)
 
             #print(matrix)
-            matrix = np.array(matrix.cpu())
+            matrix = np.array(matrix)
             print("matrix.shape:",matrix.shape)
 
             print("Clustering sim matrix...")
