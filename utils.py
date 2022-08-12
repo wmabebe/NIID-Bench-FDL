@@ -759,7 +759,7 @@ def model_similarity(m1,m2,with_data=False):
     else:
         loss,count = 0,0
         for paramA, paramB in zip(m1.parameters(), m2.parameters()):
-            loss += torch.sum(torch.abs(paramA.detach() - paramB))
+            loss += torch.sum(torch.abs(paramA.detach() - paramB)).cpu().numpy()
             count += 1
         return loss/count
 
