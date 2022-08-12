@@ -758,9 +758,11 @@ def model_similarity(m1,m2,with_data=False):
         pass
     else:
         loss,count = 0,0
-        for paramA, paramB in zip(m1.parameters(), m2.parameters()):
-            loss += torch.sum(torch.abs(paramA.detach() - paramB.detach())).detach().numpy()
-            count += 1
+        # for paramA, paramB in zip(m1.parameters(), m2.parameters()):
+        #     loss += torch.sum(torch.abs(paramA.detach() - paramB.detach())).numpy()
+        #     count += 1
+        count = len(m1.state_dict().values())
+        loss = sum((x - y).sum() for x, y in zip(m1.state_dict().values(), m2.state_dict().values()))
         return loss/count
 
 def get_signed_radians(grad1,grad2):
