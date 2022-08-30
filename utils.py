@@ -854,6 +854,22 @@ def is_empty(clusters):
             return False
     return True
 
+def sampled_clique(cliques,G,strategy):
+    size = len(cliques)
+    sample = []
+    if strategy == "rand":
+        while len(sample) != size:
+            clique = random.choice(cliques)
+            sample = random.sample(clique,size)
+    elif strategy == "optim":
+        for clique in cliques:
+            sample.append(random.choice(clique))
+    for n1 in sample:
+        for n2 in sample:
+            if n1 != n2:
+                G.add_edge(n1,n2)
+    
+        
 def clique_the_cliques(cliques,labels,G):
     #Clique the cliques
     for idx1,clique1 in enumerate(cliques):
@@ -917,6 +933,10 @@ def m_cliques(adj_list,labels,topology="clique"):
         clique_the_cliques(cliques,labels,G_cliques)
     elif topology == "ring":
         cliques_on_ring(cliques,labels,G_cliques)
+    elif topology == "sample_rand":
+        sampled_clique(cliques,G_cliques,"rand")
+    elif topology == "sample_optim":
+        sampled_clique(cliques,G_cliques,"optim")
     
     return G_cliques
     

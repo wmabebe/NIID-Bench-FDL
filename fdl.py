@@ -873,6 +873,12 @@ if __name__ == '__main__':
                     G0 = m_cliques(adj_list,rand_labels)
                 else:
                     G0 = m_cliques(adj_list,list(kmeans.labels_))
+            elif TOPOLOGY == "sample":
+                if STRATEGY == "rand":
+                    G0 = m_cliques(adj_list,rand_labels,"sample_rand")
+                else:
+                    G0 = m_cliques(adj_list,list(kmeans.labels_),"sample_optim")
+                print("Sampling done. G0.nodes:",G0.number_of_nodes())
             else:
                 if STRATEGY == "rand":
                     G0 = m_cliques(adj_list,rand_labels,"ring")
@@ -906,8 +912,8 @@ if __name__ == '__main__':
             # else:
             #     for idx in selected:
             #         nets[idx].load_state_dict(global_para)
-
-            _, avg_local_train_acc, avg_local_test_acc = local_train_net(nets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
+            subnets = {net_i: net for net_i,net in nets.items() if net in list(G0.nodes)}
+            _, avg_local_train_acc, avg_local_test_acc = local_train_net(subnets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
             # local_train_net(nets, args, net_dataidx_map, local_split=False, device=device)
 
             # update global model
