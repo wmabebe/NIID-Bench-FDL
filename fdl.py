@@ -875,10 +875,11 @@ if __name__ == '__main__':
                     G0 = m_cliques(adj_list,list(kmeans.labels_))
             elif TOPOLOGY == "sample":
                 if STRATEGY == "rand":
-                    G0 = m_cliques(adj_list,rand_labels,"sample_rand")
+                    G0 = m_cliques(adj_list,list(kmeans.labels_),"sample_rand")
                 else:
                     G0 = m_cliques(adj_list,list(kmeans.labels_),"sample_optim")
                 print("Sampling done. G0.nodes:",G0.number_of_nodes())
+                print("G0 labels: ",[kmeans.labels_[n.id] for n in list(G0.nodes)])
             else:
                 if STRATEGY == "rand":
                     G0 = m_cliques(adj_list,rand_labels,"ring")

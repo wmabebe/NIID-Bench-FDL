@@ -723,7 +723,7 @@ def size(matrix):
     for _,row in matrix.items():
         #size += len([r for r in row.values() if r != None])
         for _,v in row.items():
-            print("V:",v)
+            #print("V:",v)
             size += 1 if v != None else 0
     return size
 
@@ -854,20 +854,26 @@ def is_empty(clusters):
             return False
     return True
 
-def sampled_clique(cliques,G,strategy):
-    size = len(cliques)
+def sampled_clique(clusters,strategy):
+    G = nx.Graph()
     sample = []
+    #Sample 'size' nodes from a single cluster
     if strategy == "rand":
-        while len(sample) != size:
-            clique = random.choice(cliques)
-            sample = random.sample(clique,size)
+        size = len(clusters)
+        while len(sample) < size:
+            cluster = random.choice(clusters)
+            if len(cluster) >= size:
+                sample = random.sample(cluster,size)
+    #Sample 1 choice from each cluster
     elif strategy == "optim":
-        for clique in cliques:
-            sample.append(random.choice(clique))
+        for _,cluster in clusters.items():
+            if len(cluster) > 0:
+                sample.append(random.choice(cluster))
     for n1 in sample:
         for n2 in sample:
             if n1 != n2:
                 G.add_edge(n1,n2)
+    return G
     
         
 def clique_the_cliques(cliques,labels,G):
@@ -900,7 +906,6 @@ def cliques_on_ring(cliques,labels,G):
     G.add_edge(n1,n2)
 
 def m_cliques(adj_list,labels,topology="clique"):
-    G_cliques = nx.Graph()
     num_clusters = list(np.unique(labels))
     clusters = {i:[] for i in num_clusters}
     hood = {n.id:[i for i in num_clusters if i != labels[n.id]] for n in adj_list}
@@ -909,34 +914,38 @@ def m_cliques(adj_list,labels,topology="clique"):
     for idx,n in enumerate(adj_list):
         clusters[labels[idx]].append(n)
     
-    cliques = []
-    while not is_empty(clusters):
-        clique = []
-        
-        #Add clique nodes
-        for _,cluster in clusters.items():
-            if len(cluster) > 0:
-                n = random.choice(cluster)
-                clique.append(n)
-                cluster.remove(n)
-        
-        #Cliqify
-        for n1 in clique:
-            for n2 in clique:
-                if n1 != n2:
-                    G_cliques.add_edge(n1,n2)
-        
-        #Aggregate clique
-        cliques.append(clique)
-    
-    if topology == "clique":
-        clique_the_cliques(cliques,labels,G_cliques)
-    elif topology == "ring":
-        cliques_on_ring(cliques,labels,G_cliques)
-    elif topology == "sample_rand":
-        sampled_clique(cliques,G_cliques,"rand")
+    if topology == "sample_rand":
+        G_cliques = sampled_clique(clusters,"rand")
+        print("Rand sampled clique size:", G_cliques.number_of_nodes())
     elif topology == "sample_optim":
-        sampled_clique(cliques,G_cliques,"optim")
+        G_cliques = sampled_clique(clusters,"optim")
+        print("Optim sampled clique size:", G_cliques.number_of_nodes())
+    else:
+        G_cliques = nx.Graph()
+        cliques = []
+        while not is_empty(clusters):
+            clique = []
+            
+            #Add clique nodes
+            for _,cluster in clusters.items():
+                if len(cluster) > 0:
+                    n = random.choice(cluster)
+                    clique.append(n)
+                    cluster.remove(n)
+            
+            #Cliqify
+            for n1 in clique:
+                for n2 in clique:
+                    if n1 != n2:
+                        G_cliques.add_edge(n1,n2)
+            
+            #Aggregate clique
+            cliques.append(clique)
+
+        if topology == "clique":
+            clique_the_cliques(cliques,labels,G_cliques)
+        elif topology == "ring":
+            cliques_on_ring(cliques,labels,G_cliques)
     
     return G_cliques
     
