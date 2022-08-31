@@ -723,7 +723,7 @@ def size(matrix):
     for _,row in matrix.items():
         #size += len([r for r in row.values() if r != None])
         for _,v in row.items():
-            #print("V:",v)
+            print("V:",v)
             size += 1 if v != None else 0
     return size
 

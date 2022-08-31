@@ -901,9 +901,9 @@ if __name__ == '__main__':
         for round in range(args.comm_round):
             logger.info("in comm round:" + str(round))
 
-            arr = np.arange(args.n_parties)
-            np.random.shuffle(arr)
-            selected = arr[:int(args.n_parties * args.sample)]
+            # arr = np.arange(args.n_parties)
+            # np.random.shuffle(arr)
+            # selected = arr[:int(args.n_parties * args.sample)]
 
             #global_para = global_model.state_dict()
             # if round == 0:
@@ -913,13 +913,14 @@ if __name__ == '__main__':
             # else:
             #     for idx in selected:
             #         nets[idx].load_state_dict(global_para)
-            subnets = {net_i: net for net_i,net in nets.items() if net in list(G0.nodes)}
+            subnets = {net_i:net for net_i,net in nets.items() if net in [n.model for n in G0.nodes]}
+            selected = [net_i for net_i,_ in subnets.items()]
             _, avg_local_train_acc, avg_local_test_acc = local_train_net(subnets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
             # local_train_net(nets, args, net_dataidx_map, local_split=False, device=device)
 
             # update global model
-            total_data_points = sum([len(net_dataidx_map[r]) for r in selected])
-            fed_avg_freqs = [len(net_dataidx_map[r]) / total_data_points for r in selected]
+            # total_data_points = sum([len(net_dataidx_map[r]) for r in selected])
+            # fed_avg_freqs = [len(net_dataidx_map[r]) / total_data_points for r in selected]
 
             # for idx in range(len(selected)):
             #     net_para = nets[selected[idx]].cpu().state_dict()
@@ -939,13 +940,13 @@ if __name__ == '__main__':
             ripple_updates(G0)
 
             avg_global_train_acc, avg_global_test_acc = 0.0, 0.0
-            for idx,net in nets.items():
-                avg_global_train_acc += compute_accuracy(net, train_dl_global,get_confusion_matrix=False, device=device)
-                test_acc, conf_matrix = compute_accuracy(net, test_dl_global, get_confusion_matrix=True, device=device)
+            for idx,net in subnets.items():
+                avg_global_train_acc += compute_accuracy(subnets, train_dl_global,get_confusion_matrix=False, device=device)
+                test_acc, conf_matrix = compute_accuracy(subnets, test_dl_global, get_confusion_matrix=True, device=device)
                 avg_global_test_acc += test_acc
             
-            avg_global_train_acc /= len(nets)
-            avg_global_test_acc /= len(nets)
+            avg_global_train_acc /= len(subnets)
+            avg_global_test_acc /= len(subnets)
 
             logger.info('>> Avg Local Train accuracy: %f' % avg_local_train_acc)
             logger.info('>> Avg Local Test accuracy: %f' % avg_local_test_acc)
