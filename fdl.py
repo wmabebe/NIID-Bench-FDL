@@ -913,7 +913,7 @@ if __name__ == '__main__':
             # else:
             #     for idx in selected:
             #         nets[idx].load_state_dict(global_para)
-            subnets = {net_i:net for net_i,net in nets.items() if net in [n.model for n in G0.nodes]}
+            subnets = {net_i:net for net_i,net in nets.items() if net in [n.model for n in list(G0.nodes)]}
             selected = [net_i for net_i,_ in subnets.items()]
             _, avg_local_train_acc, avg_local_test_acc = local_train_net(subnets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
             # local_train_net(nets, args, net_dataidx_map, local_split=False, device=device)
@@ -941,8 +941,8 @@ if __name__ == '__main__':
 
             avg_global_train_acc, avg_global_test_acc = 0.0, 0.0
             for idx,net in subnets.items():
-                avg_global_train_acc += compute_accuracy(subnets, train_dl_global,get_confusion_matrix=False, device=device)
-                test_acc, conf_matrix = compute_accuracy(subnets, test_dl_global, get_confusion_matrix=True, device=device)
+                avg_global_train_acc += compute_accuracy(net, train_dl_global,get_confusion_matrix=False, device=device)
+                test_acc, conf_matrix = compute_accuracy(net, test_dl_global, get_confusion_matrix=True, device=device)
                 avg_global_test_acc += test_acc
             
             avg_global_train_acc /= len(subnets)
