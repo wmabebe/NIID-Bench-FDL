@@ -828,8 +828,8 @@ if __name__ == '__main__':
 
         
         #Save data to file
-        write_to_file(train_dl_global,args.logdir + "train_dl_global.pkl")
-        write_to_file(test_dl_global,args.logdir + "test_dl_global.pkl")
+        #write_to_file(train_dl_global,args.logdir + "train_dl_global.pkl")
+        #write_to_file(test_dl_global,args.logdir + "test_dl_global.pkl")
         write_to_file(train_ds_global,args.logdir + "train_ds_global.pkl")
         write_to_file(test_ds_global,args.logdir + "test_ds_global.pkl")
         write_to_file(net_dataidx_map,args.logdir + "net_dataidx_map.pkl")
