@@ -134,7 +134,7 @@ class SimpleCNN(nn.Module):
         self.fc1 = nn.Linear(input_dim, hidden_dims[0])
         self.fc2 = nn.Linear(hidden_dims[0], hidden_dims[1])
         self.fc3 = nn.Linear(hidden_dims[1], output_dim)
-        self.grads = {'conv1':None,'conv2':None}
+        self.grads = {'fc3':None}
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -179,7 +179,7 @@ class SimpleCNNMNIST(nn.Module):
         self.fc1 = nn.Linear(input_dim, hidden_dims[0])
         self.fc2 = nn.Linear(hidden_dims[0], hidden_dims[1])
         self.fc3 = nn.Linear(hidden_dims[1], output_dim)
-        self.grads = {'conv1':None,'conv2':None}
+        self.grads = {'fc3':None}
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
