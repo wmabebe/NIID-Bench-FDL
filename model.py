@@ -151,7 +151,7 @@ class SimpleCNN(nn.Module):
         # self.grads['conv2'] = np.copy(self.conv2.weight.grad.cpu().clone().numpy())
         # self.grads['fc1'].append(np.copy(self.fc1.weight.grad.numpy()))
         # self.grads['fc2'].append(np.copy(self.fc2.weight.grad.numpy()))
-        self.grads['fc3'].append(np.copy(self.fc3.weight.grad.numpy()))
+        self.grads['fc3'] = np.copy(self.fc3.weight.grad.cpu().clone().numpy())
 
 
 # a simple perceptron model for generated 3D data
@@ -196,7 +196,7 @@ class SimpleCNNMNIST(nn.Module):
         # self.grads['conv2'] = np.copy(self.conv2.weight.grad.cpu().clone().numpy())
         # self.grads['fc1'].append(np.copy(self.fc1.weight.grad.numpy()))
         # self.grads['fc2'].append(np.copy(self.fc2.weight.grad.numpy()))
-        self.grads['fc3'].append(np.copy(self.fc3.weight.grad.numpy()))
+        self.grads['fc3'] = np.copy(self.fc3.weight.grad.cpu().clone().numpy())
 
 
 class SimpleCNNContainer(nn.Module):
