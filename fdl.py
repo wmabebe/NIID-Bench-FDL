@@ -873,6 +873,11 @@ if __name__ == '__main__':
                     G0 = m_cliques(adj_list,rand_labels)
                 else:
                     G0 = m_cliques(adj_list,list(kmeans.labels_))
+            elif TOPOLOGY == "pcc": #pcc (per cluster clique) topology creates one cluster per clique
+                if STRATEGY == "rand":
+                    G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_rand")
+                else:
+                    G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_optim")
             elif TOPOLOGY == "sample":
                 if STRATEGY == "rand":
                     G0 = m_cliques(adj_list,list(kmeans.labels_),"sample_rand")

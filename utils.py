@@ -854,6 +854,36 @@ def is_empty(clusters):
             return False
     return True
 
+def pcc_clique(clusters,strategy, labels):
+    G = nx.Graph()
+    cliques = []
+    size = len(clusters)
+    if strategy == "rand":
+        for _,cluster in clusters.items():
+            clique_size = len(cluster) if len(cluster) < size else size
+            cliques.append( random.sample(cluster,clique_size))
+    
+    elif strategy == "optim":
+        while len(cliques) < size:
+            clique = []
+            for _,cluster in clusters.items():
+                if len(cluster):
+                    element = random.choice(cluster)
+                    clique.append(element)
+                    del cluster[cluster.index(element)]
+            if clique:
+                cliques.append(clique)
+    
+    for clique in cliques:
+        for n1 in clique:
+            for n2 in clique:
+                if n1 != n2:
+                    G.add_edge(n1,n2)
+
+    cliques_on_ring(cliques,labels,G)
+    return G
+
+
 def sampled_clique(clusters,strategy):
     G = nx.Graph()
     sample = []
@@ -919,6 +949,12 @@ def m_cliques(adj_list,labels,topology="clique"):
         print("Rand sampled clique size:", G_cliques.number_of_nodes())
     elif topology == "sample_optim":
         G_cliques = sampled_clique(clusters,"optim")
+        print("Optim sampled clique size:", G_cliques.number_of_nodes())
+    elif topology == "pcc_rand":
+        G_cliques = pcc_clique(clusters,"rand",labels)
+        print("Rand sampled clique size:", G_cliques.number_of_nodes())
+    elif topology == "pcc_optim":
+        G_cliques = pcc_clique(clusters,"optim",labels)
         print("Optim sampled clique size:", G_cliques.number_of_nodes())
     else:
         G_cliques = nx.Graph()
