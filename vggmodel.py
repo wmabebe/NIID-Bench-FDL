@@ -2,6 +2,7 @@ import math
 
 import torch.nn as nn
 import torch.nn.init as init
+import numpy as np
 
 __all__ = [
     'VGG', 'vgg11', 'vgg11_bn', 'vgg13', 'vgg13_bn', 'vgg16', 'vgg16_bn',
@@ -32,14 +33,22 @@ class VGG(nn.Module):
                 m.weight.data.normal_(0, math.sqrt(2. / n))
                 m.bias.data.zero_()
 
+        self.grads = {'last_fc_weights':None}
 
     def forward(self, x):
         x = self.features(x)
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
         return x
-
-
+    
+    def stash_grads(self):
+        last_weights = None
+        for name, param in self.named_parameters():
+            if "classifier" in name and "weight" in name:
+                last_weights = param
+        
+        self.grads['last_fc_weights'] = np.copy(last_weights.grad.cpu().clone().numpy())
+    
 def make_layers(cfg, batch_norm=False):
     layers = []
     in_channels = 3
