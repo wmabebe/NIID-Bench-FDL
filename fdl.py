@@ -92,6 +92,10 @@ def init_nets(net_configs, dropout_p, n_parties, args):
             net = FcNet(input_size, hidden_sizes, output_size, dropout_p)
         elif args.model == "vgg":
             net = vgg11()
+        elif args.model == "simple-ffnn":
+            #Assuming we are using MNIST dataset: input size = 784, num_classes = 10
+            input_size, hidden_size, num_classes = 784, 10, 10
+            net = NeuralNet(input_size, hidden_size, num_classes)
         elif args.model == "simple-cnn":
             if args.dataset in ("cifar10", "cinic10", "svhn"):
                 net = SimpleCNN(input_dim=(16 * 5 * 5), hidden_dims=[120, 84], output_dim=10)
