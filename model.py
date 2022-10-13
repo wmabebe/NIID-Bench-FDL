@@ -12,7 +12,7 @@ class NeuralNet(nn.Module):
         self.relu = nn.ReLU()
         self.l2 = nn.Linear(hidden_size, num_classes) 
 
-        self.grads = {"l1":None, "l2":None} 
+        self.grads = {"l2":None} 
     
     def forward(self, x):
         x = x.reshape(-1,784)
@@ -23,7 +23,6 @@ class NeuralNet(nn.Module):
         return out
     
     def stash_grads(self):
-        self.grads['l1'] = np.copy(self.l1.weight.grad.cpu().clone().numpy())
         self.grads['l2'] = np.copy(self.l2.weight.grad.cpu().clone().numpy())
 
 
