@@ -177,7 +177,7 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
                 if stash and epoch == epochs - 1 and idx == last_td and batch_idx == last_batch:
                     net.stash_grads()
                 
-                #optimizer.step()
+                optimizer.step()
                 scheduler.step()
 
                 cnt += 1
