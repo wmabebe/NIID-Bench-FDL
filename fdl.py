@@ -144,7 +144,8 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
         optimizer = optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=lr, weight_decay=args.reg,
                                amsgrad=True)
     elif args_optimizer == 'sgd':
-        optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr=lr, momentum=args.rho, weight_decay=args.reg)
+        optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr=lr) #, momentum=args.rho, weight_decay=args.reg)
+    scheduler = optim.lr_scheduler.StepLR(optimizer,step_size=5,gamma=0.1)
     criterion = nn.CrossEntropyLoss().to(device)
 
     cnt = 0
@@ -175,7 +176,9 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
                 #Collect grads here if in pretraining (stash) mode!
                 if stash and epoch == epochs - 1 and idx == last_td and batch_idx == last_batch:
                     net.stash_grads()
-                optimizer.step()
+                
+                #optimizer.step()
+                scheduler.step()
 
                 cnt += 1
                 epoch_loss_collector.append(loss.item())
