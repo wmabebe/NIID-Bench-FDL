@@ -144,8 +144,9 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
         optimizer = optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=lr, weight_decay=args.reg,
                                amsgrad=True)
     elif args_optimizer == 'sgd':
-        optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr=lr) #, momentum=args.rho, weight_decay=args.reg)
+        optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr=lr)#, momentum=0.9, weight_decay=5e-4, nesterov=True)
     scheduler = optim.lr_scheduler.StepLR(optimizer,step_size=5,gamma=0.1)
+    #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5)
     criterion = nn.CrossEntropyLoss().to(device)
 
     cnt = 0
@@ -178,10 +179,11 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
                     net.stash_grads()
                 
                 optimizer.step()
-                scheduler.step()
 
                 cnt += 1
                 epoch_loss_collector.append(loss.item())
+        
+        scheduler.step()
 
         epoch_loss = sum(epoch_loss_collector) / len(epoch_loss_collector)
         logger.info('Epoch: %d Loss: %f' % (epoch, epoch_loss))
