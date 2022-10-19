@@ -28,6 +28,7 @@ from utils import *
 from vggmodel import *
 from resnetcifar import *
 from node import *
+from resnet import *
 
 
 def get_args():
@@ -113,6 +114,8 @@ def init_nets(net_configs, dropout_p, n_parties, args):
                 net = ModerateCNN(output_dim=2)
         elif args.model == "resnet":
             net = ResNet50_cifar10()
+        elif args.model == 'res20':
+            net = resnet20()
         elif args.model == "vgg16":
             net = vgg16()
         else:

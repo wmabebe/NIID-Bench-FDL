@@ -1,7 +1,11 @@
 scikit-learn==0.22.1
 numpy==1.18.1
 scipy==1.4.1
-torch==1.1.0
-torchvision==0.3.0
+torch==1.4.0
+torchvision==0.1.6
 pandas==0.24.2
 requests==2.23.0
+Pillow
+pandas
+networkx
+matplotlib
