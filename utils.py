@@ -723,7 +723,7 @@ def size(matrix):
     for _,row in matrix.items():
         #size += len([r for r in row.values() if r != None])
         for _,v in row.items():
-            print("V:",v)
+            #print("V:",v)
             size += 1 if v != None else 0
     return size
 
@@ -854,7 +854,7 @@ def is_empty(clusters):
             return False
     return True
 
-def pcc_clique(clusters,strategy, labels):
+def pcc_clique(clusters,strategy, labels, cut=0):
     G = nx.Graph()
     cliques = []
     size = len(clusters)
@@ -880,7 +880,8 @@ def pcc_clique(clusters,strategy, labels):
                 if n1 != n2:
                     G.add_edge(n1,n2)
 
-    cliques_on_ring(cliques,labels,G)
+    print("pcc_clique CUT:", cut)
+    cliques_on_ring(cliques,labels,G,cut)
     return G
 
 
@@ -919,27 +920,35 @@ def clique_the_cliques(cliques,labels,G):
                 else:
                     break
 
-def cliques_on_ring(cliques,labels,G):
+def cliques_on_ring(cliques,labels,G, cut=0):
+    cuts = []
+    print("cliques_on_ring CUT:", cut)
+    if cut:
+        gap = math.ceil(len(cliques) / cut)
+        cuts = [i for i in range(0,len(cliques),gap)]
+        print("CUTS:", cuts)
+
     n1 = random.choice(cliques[0]) 
     for idx,clique in enumerate(cliques):
-        if idx > 0:
+        if idx > 0 and idx not in cuts:
             candidates = [n for n in clique if labels[n.id] != labels[n1.id]]
             candidates = candidates if len(candidates) > 0 else clique
             n2 = random.choice(candidates)
             G.add_edge(n1,n2)
-            n1 = random.choice(clique)
+        n1 = random.choice(clique)
     
     #Attach head and tail
-    candidates = [n for n in cliques[0] if labels[n.id] != labels[n1.id]]
-    candidates = candidates if len(candidates) > 0 else cliques[0]
-    n2 = random.choice(candidates)
-    G.add_edge(n1,n2)
+    if 0 not in cuts:
+        candidates = [n for n in cliques[0] if labels[n.id] != labels[n1.id]]
+        candidates = candidates if len(candidates) > 0 else cliques[0]
+        n2 = random.choice(candidates)
+        G.add_edge(n1,n2)
 
-def m_cliques(adj_list,labels,topology="clique"):
+def m_cliques(adj_list,labels,topology="clique",cut=0):
     num_clusters = list(np.unique(labels))
     clusters = {i:[] for i in num_clusters}
     hood = {n.id:[i for i in num_clusters if i != labels[n.id]] for n in adj_list}
-    
+    print("m_cliques CUT:", cut)
     #Add nodes to clusters
     for idx,n in enumerate(adj_list):
         clusters[labels[idx]].append(n)
@@ -951,10 +960,10 @@ def m_cliques(adj_list,labels,topology="clique"):
         G_cliques = sampled_clique(clusters,"optim")
         print("Optim sampled clique size:", G_cliques.number_of_nodes())
     elif topology == "pcc_rand":
-        G_cliques = pcc_clique(clusters,"rand",labels)
+        G_cliques = pcc_clique(clusters,"rand",labels,cut)
         print("Rand sampled clique size:", G_cliques.number_of_nodes())
     elif topology == "pcc_optim":
-        G_cliques = pcc_clique(clusters,"optim",labels)
+        G_cliques = pcc_clique(clusters,"optim",labels,cut)
         print("Optim sampled clique size:", G_cliques.number_of_nodes())
     else:
         G_cliques = nx.Graph()

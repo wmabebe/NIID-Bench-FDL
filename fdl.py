@@ -63,6 +63,7 @@ def get_args():
     parser.add_argument('--topology',type=str, default="tree", help='Node graph topology default=tree, options (ring, clique)')
     parser.add_argument('--strategy',type=str, default="rand", help='Clumping strategy default=rand, options (optim)')
     parser.add_argument('--similarity',type=str, default="grad", help='Similarity computation default=grad, options (param)')
+    parser.add_argument('--cut',type=int, default=0, help='Number of cuts in final graph')
     args = parser.parse_args()
     return args
 
@@ -132,7 +133,7 @@ def init_nets(net_configs, dropout_p, n_parties, args):
     return nets, model_meta_data, layer_type
 
 
-def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_optimizer, device="cpu",stash=False):
+def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_optimizer, sched, device="cpu",stash=False):
     logger.info('Training network %s' % str(net_id))
 
     train_acc = compute_accuracy(net, train_dataloader, device=device)
@@ -186,7 +187,8 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
                 cnt += 1
                 epoch_loss_collector.append(loss.item())
         
-        scheduler.step()
+        if sched:
+            scheduler.step()
 
         epoch_loss = sum(epoch_loss_collector) / len(epoch_loss_collector)
         logger.info('Epoch: %d Loss: %f' % (epoch, epoch_loss))
@@ -316,8 +318,10 @@ def local_pre_training(nets, selected, args, net_dataidx_map, test_dl = None, de
         train_dl_global, test_dl_global, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32)
         n_epoch = args.epochs
 
+        sched = args.model in ["res20", "vgg"]
+
         #Pre train for 10 epochs
-        _, _ = train_net(net_id, net, train_dl_local, test_dl, 10, args.lr, args.optimizer, device=device, stash=True)
+        _, _ = train_net(net_id, net, train_dl_local, test_dl, 10, args.lr, args.optimizer, sched, device=device, stash=True)
 
 def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
     avg_acc = 0.0
@@ -343,8 +347,9 @@ def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, devic
         train_dl_global, test_dl_global, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32)
         n_epoch = args.epochs
 
+        sched = args.model in ["res20", "vgg"]
 
-        trainacc, testacc = train_net(net_id, net, train_dl_local, test_dl, n_epoch, args.lr, args.optimizer, device=device)
+        trainacc, testacc = train_net(net_id, net, train_dl_local, test_dl, n_epoch, args.lr, args.optimizer, sched, device=device)
         logger.info("net %d final test acc %f" % (net_id, testacc))
         avg_acc += testacc
         avg_train_acc += trainacc
@@ -707,14 +712,15 @@ if __name__ == '__main__':
     NOW = str(datetime.datetime.now()).replace(" ","--")
     IID = args.partition
     SIMILARITY = args.similarity
+    CUT = args.cut
 
     #Create random template graph
     GT = nx.random_regular_graph(d=MAX_PEERS, n=NODES)
 
 
     #Create output directory
-    args.logdir = './logs/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_rounds[{}]_topology[{}]_strategy[{}]_similarity[{}]_frac[{}]_local_ep[{}]_local_bs[{}]/'. \
-        format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS, args.comm_round,TOPOLOGY,STRATEGY,SIMILARITY, args.sample,args.epochs, args.batch_size)
+    args.logdir = './logs/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_rounds[{}]_topology[{}]_strategy[{}]_cut[{}]_similarity[{}]_frac[{}]_local_ep[{}]_local_bs[{}]/'. \
+        format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS, args.comm_round,TOPOLOGY,STRATEGY,CUT,SIMILARITY, args.sample,args.epochs, args.batch_size)
     os.makedirs(os.path.dirname(args.logdir), exist_ok=True)
 
     
@@ -887,9 +893,9 @@ if __name__ == '__main__':
                     G0 = m_cliques(adj_list,list(kmeans.labels_))
             elif TOPOLOGY == "pcc": #pcc (per cluster clique) topology creates one cluster per clique
                 if STRATEGY == "rand":
-                    G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_rand")
+                    G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_rand",CUT)
                 else:
-                    G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_optim")
+                    G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_optim",CUT)
             elif TOPOLOGY == "sample":
                 if STRATEGY == "rand":
                     G0 = m_cliques(adj_list,list(kmeans.labels_),"sample_rand")
@@ -1195,6 +1201,6 @@ if __name__ == '__main__':
         nets, local_model_meta_data, layer_type = init_nets(args.net_config, args.dropout_p, 1, args)
         n_epoch = args.epochs
 
-        trainacc, testacc = train_net(0, nets[0], train_dl_global, test_dl_global, n_epoch, args.lr, args.optimizer, device=device)
+        trainacc, testacc = train_net(0, nets[0], train_dl_global, test_dl_global, n_epoch, args.lr, args.optimizer, False, device=device)
 
         logger.info("All in test acc: %f" % testacc)
