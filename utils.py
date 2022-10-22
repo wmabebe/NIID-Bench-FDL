@@ -816,7 +816,7 @@ def get_preds(model, dataloader, device="cpu"):
     if was_training:
         model.train()
 
-    return pred_labels_list
+    return torch.from_numpy(pred_labels_list)
 
 
 def kl_divergence(m1,m2,val_dl,device="cpu"):
