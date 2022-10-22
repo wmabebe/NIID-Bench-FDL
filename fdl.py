@@ -62,7 +62,7 @@ def get_args():
     parser.add_argument('--sample', type=float, default=1, help='Sample ratio for each communication round')
     parser.add_argument('--topology',type=str, default="tree", help='Node graph topology default=tree, options (ring, clique)')
     parser.add_argument('--strategy',type=str, default="rand", help='Clumping strategy default=rand, options (optim)')
-    parser.add_argument('--similarity',type=str, default="grad", help='Similarity computation default=grad, options (param)')
+    parser.add_argument('--similarity',type=str, default="grad", help='Similarity computation default=grad, options (kl)')
     parser.add_argument('--cut',type=int, default=0, help='Number of cuts in final graph')
     args = parser.parse_args()
     return args
@@ -767,7 +767,26 @@ if __name__ == '__main__':
                                                                                         args.batch_size,
                                                                                         32)
 
-    print("len train_dl_global:", len(train_ds_global))
+    print("len train_ds_global:", len(train_ds_global))
+    print("len test_ds_global:", len(test_ds_global))
+
+    #Split the test into val and test
+    top = list(range(0, 1000))
+    bottom = list(range(1000, len(test_ds_global)))
+    trainset_1 = torch.utils.data.Subset(test_ds_global, top)
+    trainset_2 = torch.utils.data.Subset(test_ds_global, bottom)
+
+    print("len trainset_1:", len(trainset_1))
+    print("len trainset_2:", len(trainset_2))
+
+    val_dl_global = torch.utils.data.DataLoader(trainset_1, batch_size=32,
+                                                shuffle=False, num_workers=2)
+    test_dl_global = torch.utils.data.DataLoader(trainset_2, batch_size=32,
+                                                shuffle=False, num_workers=2)
+
+    print("len train_dl_global:",len(train_dl_global))
+    print("len val_dl_global:",len(val_dl_global))
+    print("len test_dl_global:",len(test_dl_global))
 
 
     data_size = len(test_ds_global)
@@ -829,7 +848,7 @@ if __name__ == '__main__':
             while size(SIM_MATRIX) < NODES ** 2:
                 print("\nMATRIX i="+ str(count) +": size=",size(SIM_MATRIX))
                 G0 = BFTM(G0,SIM_MATRIX,CACHE,MAX_PEERS)
-                update_matrix(G0,SIM_MATRIX,CACHE,adj_list,sim=SIMILARITY)
+                update_matrix(G0,SIM_MATRIX,CACHE,adj_list,sim=SIMILARITY,val_dl=val_dl_global,device=device)
                 count += 1
 
             #show(SIM_MATRIX)

@@ -11,7 +11,7 @@ from sklearn.metrics import confusion_matrix
 from torch.utils.data import DataLoader
 
 from model import *
-from datasets import MNIST_truncated, CIFAR10_truncated, SVHN_custom, FashionMNIST_truncated, CustomTensorDataset, CelebA_custom, FEMNIST, Generated, genData
+from datasets import MNIST_truncated, CIFAR10_truncated, SVHN_custom, FashionMNIST_truncated, CustomTensorDataset, CelebA_custom, FEMNIST, Generated, genData, CIFAR100_truncated, ImageFolder_custom
 from math import sqrt
 
 import torch.nn as nn
@@ -140,6 +140,32 @@ def load_femnist_data(datadir):
 
     return (X_train, y_train, u_train, X_test, y_test, u_test)
 
+def load_cifar100_data(datadir):
+    transform = transforms.Compose([transforms.ToTensor()])
+
+    cifar100_train_ds = CIFAR100_truncated(datadir, train=True, download=True, transform=transform)
+    cifar100_test_ds = CIFAR100_truncated(datadir, train=False, download=True, transform=transform)
+
+    X_train, y_train = cifar100_train_ds.data, cifar100_train_ds.target
+    X_test, y_test = cifar100_test_ds.data, cifar100_test_ds.target
+
+    # y_train = y_train.numpy()
+    # y_test = y_test.numpy()
+
+    return (X_train, y_train, X_test, y_test)
+
+
+def load_tinyimagenet_data(datadir):
+    transform = transforms.Compose([transforms.ToTensor()])
+    xray_train_ds = ImageFolder_custom(datadir+'./train/', transform=transform)
+    xray_test_ds = ImageFolder_custom(datadir+'./val/', transform=transform)
+
+    X_train, y_train = np.array([s[0] for s in xray_train_ds.samples]), np.array([int(s[1]) for s in xray_train_ds.samples])
+    X_test, y_test = np.array([s[0] for s in xray_test_ds.samples]), np.array([int(s[1]) for s in xray_test_ds.samples])
+
+    return (X_train, y_train, X_test, y_test)
+
+
 def record_net_data_stats(y_train, net_dataidx_map, logdir):
 
     net_cls_counts = {}
@@ -169,6 +195,11 @@ def partition_data(dataset, datadir, logdir, partition, n_parties, beta=0.4):
         X_train, y_train, X_test, y_test = load_celeba_data(datadir)
     elif dataset == 'femnist':
         X_train, y_train, u_train, X_test, y_test, u_test = load_femnist_data(datadir)
+    elif dataset == 'cifar100':
+        X_train, y_train, X_test, y_test = load_cifar100_data(datadir)
+    elif dataset == 'tinyimagenet':
+        X_train, y_train, X_test, y_test = load_tinyimagenet_data(datadir)
+
     elif dataset == 'generated':
         X_train, y_train = [], []
         for loc in range(4):
@@ -750,20 +781,54 @@ def add_entry(matrix,i,j,replace=False):
         if replace:
             matrix[i][j] = abs(i - j)
 
-def model_similarity(m1,m2,with_data=False):
-    if m1 == m2:
-        return 0
-    if with_data:
-        #ToDo: Implement ModDiff
+def get_preds(model, dataloader, device="cpu"):
+
+    was_training = False
+    if model.training:
+        model.eval()
+        was_training = True
+
+    true_labels_list, pred_labels_list = np.array([]), np.array([])
+
+    if type(dataloader) == type([1]):
         pass
     else:
-        loss,count = 0,0
-        # for paramA, paramB in zip(m1.parameters(), m2.parameters()):
-        #     loss += torch.sum(torch.abs(paramA.detach() - paramB.detach())).numpy()
-        #     count += 1
-        count = len(m1.state_dict().values())
-        loss = sum((x - y).sum() for x, y in zip(m1.state_dict().values(), m2.state_dict().values()))
-        return loss/count
+        dataloader = [dataloader]
+
+    correct, total = 0, 0
+    with torch.no_grad():
+        for tmp in dataloader:
+            for batch_idx, (x, target) in enumerate(tmp):
+                x, target = x.to(device), target.to(device,dtype=torch.int64)
+                out = model(x)
+                _, pred_label = torch.max(out.data, 1)
+
+                total += x.data.size()[0]
+                correct += (pred_label == target.data).sum().item()
+
+                if device == "cpu":
+                    pred_labels_list = np.append(pred_labels_list, pred_label.numpy())
+                    true_labels_list = np.append(true_labels_list, target.data.numpy())
+                else:
+                    pred_labels_list = np.append(pred_labels_list, pred_label.cpu().numpy())
+                    true_labels_list = np.append(true_labels_list, target.data.cpu().numpy())
+
+    if was_training:
+        model.train()
+
+    return pred_labels_list
+
+
+def kl_divergence(m1,m2,val_dl,device="cpu"):
+    if m1 == m2:
+        return 0
+    
+    m1_preds = get_preds(m1,val_dl,device)
+    m2_preds = get_preds(m2,val_dl,device)
+
+    kl_loss = nn.KLDivLoss(reduction="batchmean")
+
+    return kl_loss(m1_preds, m2_preds)
 
 def get_signed_radians(grad1,grad2):
     g1 = flatten_layers(grad1)
@@ -780,15 +845,15 @@ def get_signed_radians(grad1,grad2):
     return radians * angle
 
 
-def update_matrix(G,M,C,adj_list,sim="grad",with_data=False):
+def update_matrix(G,M,C,adj_list,sim="grad",val_dl=None, device="cpu"):
     for node,adj in G.adj.items():
         for _1_hop,_ in adj.items():
             if sim == "grad":
                 M[node.id][_1_hop.id] = get_signed_radians(node.model.grads,_1_hop.model.grads) #node.model - _1_hop.model
                 M[_1_hop.id][node.id] = get_signed_radians(_1_hop.model.grads,node.model.grads) #_1_hop.model - node.model
-            elif sim == "param":
-                M[node.id][_1_hop.id] = model_similarity(node.model,_1_hop.model,with_data) #node.model - _1_hop.model
-                M[_1_hop.id][node.id] = model_similarity(_1_hop.model,node.model,with_data) #_1_hop.model - node.model
+            elif sim == "kd":
+                M[node.id][_1_hop.id] = kl_divergence(node.model,_1_hop.model,val_dl,device) #node.model - _1_hop.model
+                M[_1_hop.id][node.id] = kl_divergence(_1_hop.model,node.model,val_dl,device) #_1_hop.model - node.model
             C[node.id].add(_1_hop.id)
             C[_1_hop.id].add(node.id)
     for node in list(G.nodes):
@@ -798,9 +863,9 @@ def update_matrix(G,M,C,adj_list,sim="grad",with_data=False):
                     if sim == "grad":
                         M[node.id][_2_hop] = get_signed_radians(node.model.grads,adj_list[_2_hop].model.grads) #node.model - adj_list[_2_hop].model
                         M[_2_hop][node.id] = get_signed_radians(adj_list[_2_hop].model.grads,node.model.grads) #adj_list[_2_hop].model - node.model
-                    elif sim == "param":
-                        M[node.id][_1_hop.id] = model_similarity(node.model,adj_list[_2_hop].model,with_data) #node.model - _1_hop.model
-                        M[_1_hop.id][node.id] = model_similarity(adj_list[_2_hop].model,node.model,with_data) #_1_hop.model - node.model
+                    elif sim == "kd":
+                        M[node.id][_2_hop] = kl_divergence(node.model,adj_list[_2_hop].model,val_dl,device) #node.model - adj_list[_2_hop].model
+                        M[_2_hop][node.id] = kl_divergence(adj_list[_2_hop].model,node.model,val_dl,device) #adj_list[_2_hop].model - node.model
             
 
 def BFTM(G,M,C,degree):
