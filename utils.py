@@ -851,7 +851,7 @@ def update_matrix(G,M,C,adj_list,sim="grad",val_dl=None, device="cpu"):
             if sim == "grad":
                 M[node.id][_1_hop.id] = get_signed_radians(node.model.grads,_1_hop.model.grads) #node.model - _1_hop.model
                 M[_1_hop.id][node.id] = get_signed_radians(_1_hop.model.grads,node.model.grads) #_1_hop.model - node.model
-            elif sim == "kd":
+            elif sim == "kl":
                 M[node.id][_1_hop.id] = kl_divergence(node.model,_1_hop.model,val_dl,device) #node.model - _1_hop.model
                 M[_1_hop.id][node.id] = kl_divergence(_1_hop.model,node.model,val_dl,device) #_1_hop.model - node.model
             C[node.id].add(_1_hop.id)
@@ -863,7 +863,7 @@ def update_matrix(G,M,C,adj_list,sim="grad",val_dl=None, device="cpu"):
                     if sim == "grad":
                         M[node.id][_2_hop] = get_signed_radians(node.model.grads,adj_list[_2_hop].model.grads) #node.model - adj_list[_2_hop].model
                         M[_2_hop][node.id] = get_signed_radians(adj_list[_2_hop].model.grads,node.model.grads) #adj_list[_2_hop].model - node.model
-                    elif sim == "kd":
+                    elif sim == "kl":
                         M[node.id][_2_hop] = kl_divergence(node.model,adj_list[_2_hop].model,val_dl,device) #node.model - adj_list[_2_hop].model
                         M[_2_hop][node.id] = kl_divergence(adj_list[_2_hop].model,node.model,val_dl,device) #adj_list[_2_hop].model - node.model
             
