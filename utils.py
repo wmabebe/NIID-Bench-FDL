@@ -819,16 +819,22 @@ def get_preds(model, dataloader, device="cpu"):
     return torch.from_numpy(pred_labels_list)
 
 
-def kl_divergence(m1,m2,val_dl,device="cpu"):
+def kl_divergence(id1,id2,m1,m2,cache_val_preds,val_dl,device="cpu"):
     if m1 == m2:
         return 0
     
-    m1_preds = get_preds(m1,val_dl,device)
-    m2_preds = get_preds(m2,val_dl,device)
+    m1_preds = get_preds(m1,val_dl,device) if cache_val_preds[id1] == None else cache_val_preds[id1]
+    m2_preds = get_preds(m2,val_dl,device) if cache_val_preds[id2] == None else cache_val_preds[id2]
+
+    cache_val_preds[id1] = m1_preds
+    cache_val_preds[id2] = m2_preds
 
     kl_loss = nn.KLDivLoss(reduction="batchmean")
 
-    return kl_loss(m1_preds, m2_preds)
+    result = kl_loss(m1_preds, m2_preds)
+    print("\t",result)
+
+    return result
 
 def get_signed_radians(grad1,grad2):
     g1 = flatten_layers(grad1)
@@ -845,15 +851,16 @@ def get_signed_radians(grad1,grad2):
     return radians * angle
 
 
-def update_matrix(G,M,C,adj_list,sim="grad",val_dl=None, device="cpu"):
+def update_matrix(G,M,C,cache_val_preds,adj_list,sim="grad",val_dl=None, device="cpu"):
     for node,adj in G.adj.items():
         for _1_hop,_ in adj.items():
             if sim == "grad":
                 M[node.id][_1_hop.id] = get_signed_radians(node.model.grads,_1_hop.model.grads) #node.model - _1_hop.model
                 M[_1_hop.id][node.id] = get_signed_radians(_1_hop.model.grads,node.model.grads) #_1_hop.model - node.model
             elif sim == "kl":
-                M[node.id][_1_hop.id] = kl_divergence(node.model,_1_hop.model,val_dl,device) #node.model - _1_hop.model
-                M[_1_hop.id][node.id] = kl_divergence(_1_hop.model,node.model,val_dl,device) #_1_hop.model - node.model
+                print(node.id, "-", _1_hop.id)
+                M[node.id][_1_hop.id] = kl_divergence(node.id,_1_hop.id,node.model,_1_hop.model,cache_val_preds,val_dl,device) #node.model - _1_hop.model
+                M[_1_hop.id][node.id] = kl_divergence(_1_hop.id,node.id,_1_hop.model,node.model,cache_val_preds,val_dl,device) #_1_hop.model - node.model
             C[node.id].add(_1_hop.id)
             C[_1_hop.id].add(node.id)
     for node in list(G.nodes):
@@ -864,8 +871,9 @@ def update_matrix(G,M,C,adj_list,sim="grad",val_dl=None, device="cpu"):
                         M[node.id][_2_hop] = get_signed_radians(node.model.grads,adj_list[_2_hop].model.grads) #node.model - adj_list[_2_hop].model
                         M[_2_hop][node.id] = get_signed_radians(adj_list[_2_hop].model.grads,node.model.grads) #adj_list[_2_hop].model - node.model
                     elif sim == "kl":
-                        M[node.id][_2_hop] = kl_divergence(node.model,adj_list[_2_hop].model,val_dl,device) #node.model - adj_list[_2_hop].model
-                        M[_2_hop][node.id] = kl_divergence(adj_list[_2_hop].model,node.model,val_dl,device) #adj_list[_2_hop].model - node.model
+                        print(node.id, "-", _2_hop)
+                        M[node.id][_2_hop] = kl_divergence(node.id,_2_hop,node.model,adj_list[_2_hop].model,cache_val_preds,val_dl,device) #node.model - adj_list[_2_hop].model
+                        M[_2_hop][node.id] = kl_divergence(_2_hop,node.id,adj_list[_2_hop].model,node.model,cache_val_preds,val_dl,device) #adj_list[_2_hop].model - node.model
             
 
 def BFTM(G,M,C,degree):

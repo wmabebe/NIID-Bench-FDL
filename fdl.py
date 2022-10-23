@@ -321,7 +321,7 @@ def local_pre_training(nets, selected, args, net_dataidx_map, test_dl = None, de
         sched = args.model in ["res20", "vgg"]
 
         #Pre train for 10 epochs
-        _, _ = train_net(net_id, net, train_dl_local, test_dl, 10, args.lr, args.optimizer, sched, device=device, stash=True)
+        _, _ = train_net(net_id, net, train_dl_local, test_dl, 1, args.lr, args.optimizer, sched, device=device, stash=True)
 
 def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
     avg_acc = 0.0
@@ -827,6 +827,9 @@ if __name__ == '__main__':
         #Initialize node caches
         CACHE = {n.id:set() for n in adj_list}
 
+        #Initialize val preds cache
+        cache_val_preds = {n.id:None for n in adj_list}
+
         #Construct G0 using the template graph
         G0 = nx.Graph()
         for u,v in GT.edges:
@@ -842,13 +845,13 @@ if __name__ == '__main__':
             local_pre_training(nets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
 
             #Topology morphing
-            update_matrix(G0,SIM_MATRIX,CACHE,adj_list)
+            update_matrix(G0,SIM_MATRIX,CACHE,cache_val_preds,adj_list,sim=SIMILARITY,val_dl=val_dl_global,device=device)
 
             count = 1
             while size(SIM_MATRIX) < NODES ** 2:
                 print("\nMATRIX i="+ str(count) +": size=",size(SIM_MATRIX))
                 G0 = BFTM(G0,SIM_MATRIX,CACHE,MAX_PEERS)
-                update_matrix(G0,SIM_MATRIX,CACHE,adj_list,sim=SIMILARITY,val_dl=val_dl_global,device=device)
+                update_matrix(G0,SIM_MATRIX,CACHE,cache_val_preds,adj_list,sim=SIMILARITY,val_dl=val_dl_global,device=device)
                 count += 1
 
             #show(SIM_MATRIX)
