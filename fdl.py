@@ -771,18 +771,21 @@ if __name__ == '__main__':
     print("len test_ds_global:", len(test_ds_global))
 
     #Split the test into val and test
-    top = list(range(0, 1000))
-    bottom = list(range(1000, len(test_ds_global)))
-    trainset_1 = torch.utils.data.Subset(test_ds_global, top)
-    trainset_2 = torch.utils.data.Subset(test_ds_global, bottom)
 
-    print("len trainset_1:", len(trainset_1))
-    print("len trainset_2:", len(trainset_2))
+    val_dl_global = get_val_dataloader("tinyimagenet", "./data/tiny-imagenet-200/", 1000, 32)
 
-    val_dl_global = torch.utils.data.DataLoader(trainset_1, batch_size=32,
-                                                shuffle=False, num_workers=2)
-    test_dl_global = torch.utils.data.DataLoader(trainset_2, batch_size=32,
-                                                shuffle=False, num_workers=2)
+    # top = list(range(0, 1000))
+    # bottom = list(range(1000, len(test_ds_global)))
+    # trainset_1 = torch.utils.data.Subset(test_ds_global, top)
+    # trainset_2 = torch.utils.data.Subset(test_ds_global, bottom)
+
+    # print("len trainset_1:", len(trainset_1))
+    # print("len trainset_2:", len(trainset_2))
+
+    # val_dl_global = torch.utils.data.DataLoader(trainset_1, batch_size=32,
+    #                                             shuffle=False, num_workers=2)
+    # test_dl_global = torch.utils.data.DataLoader(trainset_2, batch_size=32,
+    #                                             shuffle=False, num_workers=2)
 
     print("len train_dl_global:",len(train_dl_global))
     print("len val_dl_global:",len(val_dl_global))
@@ -815,414 +818,185 @@ if __name__ == '__main__':
         test_all_in_ds = data.ConcatDataset(test_all_in_list)
         test_dl_global = data.DataLoader(dataset=test_all_in_ds, batch_size=32, shuffle=False)
 
-    if args.alg == 'fedavg':
-        logger.info("Initializing nets")
-        nets, local_model_meta_data, layer_type = init_nets(args.net_config, args.dropout_p, args.n_parties, args)
-        # global_models, global_model_meta_data, global_layer_type = init_nets(args.net_config, 0, 1, args)
-        # global_model = global_models[0]
 
-        #Initialize the p2p graph
-        adj_list = [Node(idx,net,net_dataidx_map[idx],MAX_PEERS) for idx,net in nets.items()]
-
-        #Initialize node caches
-        CACHE = {n.id:set() for n in adj_list}
-
-        #Initialize val preds cache
-        cache_val_preds = {n.id:None for n in adj_list}
-
-        #Construct G0 using the template graph
-        G0 = nx.Graph()
-        for u,v in GT.edges:
-            G0.add_edge(adj_list[u],adj_list[v])
-        
-        print("TOPOLOGY:",TOPOLOGY)
-        
-        if TOPOLOGY != "complete":
-            #Pretrain selected nodes to compute local gradients for 10 epochs
-            arr = np.arange(args.n_parties)
-            np.random.shuffle(arr)
-            selected = arr[:int(args.n_parties * args.sample)]
-            local_pre_training(nets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
-
-            #Topology morphing
-            update_matrix(G0,SIM_MATRIX,CACHE,cache_val_preds,adj_list,sim=SIMILARITY,val_dl=val_dl_global,device=device)
-
-            count = 1
-            while size(SIM_MATRIX) < NODES ** 2:
-                print("\nMATRIX i="+ str(count) +": size=",size(SIM_MATRIX))
-                G0 = BFTM(G0,SIM_MATRIX,CACHE,MAX_PEERS)
-                update_matrix(G0,SIM_MATRIX,CACHE,cache_val_preds,adj_list,sim=SIMILARITY,val_dl=val_dl_global,device=device)
-                count += 1
-
-            #show(SIM_MATRIX)
-            print("\nFINAL MATRIX i="+ str(count - 1) +": size=",size(SIM_MATRIX))
-
-            matrix = []
-            for _,row1 in sorted(SIM_MATRIX.items()):
-                temp = []
-                for val,row2 in sorted(row1.items()):
-                    temp.append(row2)
-                matrix.append(temp)
-
-            #print(matrix)
-            matrix = np.array(matrix)
-            print("matrix.shape:",matrix.shape)
-
-            print("Clustering sim matrix...")
-            #Cluster peers
-            kmeans = KMeans(n_clusters=MAX_PEERS, random_state=0).fit(matrix)
-
-            labels = {i:[] for i in range(MAX_PEERS)}
-            for idx,label in enumerate(kmeans.labels_):
-                labels[label].append(adj_list[idx])
-
-            print("Labels:")
-            for k,v in labels.items():
-                print("\t",k,":",len(v))
-            print("\tTotal:",len(kmeans.labels_))
-
-            #Plot clusters
-            pca = PCA(2)
-            print("matrix.shape",matrix.shape)
-            x_rads = matrix
-            print("x_rads.shape:",x_rads.shape)
-            df_rads = pca.fit_transform(x_rads)
-            print("df_rads.shape",df_rads.shape)
-            label_rads = kmeans.labels_
-            print("label_rads.shape",label_rads.shape)
-            u_labels_rads = np.unique(label_rads)
-            for i in u_labels_rads:
-                plt.scatter(df_rads[label_rads == i , 0] , df_rads[label_rads == i , 1] , label = i)
-            plt.legend()
-            plt.savefig(args.logdir + "kmeans.png")
-            plt.close()
-            #plt.show()
-
-            #Generate random labels for random strategy
-            rand_labels = [i for i in list(kmeans.labels_)]
-            random.shuffle(rand_labels)
-
-            #Construct tree
-            if TOPOLOGY == "tree":
-                if STRATEGY == "rand":
-                    G0 = BFTM_(adj_list,rand_labels)
-                else:
-                    G0 = BFTM_(adj_list,list(kmeans.labels_))
-            elif TOPOLOGY == "clique":
-                if STRATEGY == "rand":
-                    G0 = m_cliques(adj_list,rand_labels)
-                else:
-                    G0 = m_cliques(adj_list,list(kmeans.labels_))
-            elif TOPOLOGY == "pcc": #pcc (per cluster clique) topology creates one cluster per clique
-                if STRATEGY == "rand":
-                    G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_rand",CUT)
-                else:
-                    G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_optim",CUT)
-            elif TOPOLOGY == "sample":
-                if STRATEGY == "rand":
-                    G0 = m_cliques(adj_list,list(kmeans.labels_),"sample_rand")
-                else:
-                    G0 = m_cliques(adj_list,list(kmeans.labels_),"sample_optim")
-                print("Sampling done. G0.nodes:",G0.number_of_nodes())
-                print("G0 labels: ",[kmeans.labels_[n.id] for n in list(G0.nodes)])
-            else:
-                if STRATEGY == "rand":
-                    G0 = m_cliques(adj_list,rand_labels,"ring")
-                else:
-                    G0 = m_cliques(adj_list,list(kmeans.labels_),"ring")
-
-            nx.draw(G0,node_color=[kmeans.labels_[n.id]/len(kmeans.labels_) for n in list(G0.nodes)])
-            plt.savefig(args.logdir + "graph.png")
-        else:
-            nx.draw(G0)
-            plt.savefig(args.logdir + "graph.png")
-        
-        #Edit below to initialize all peers with same random weights
-        # global_para = global_model.state_dict()
-        # if args.is_same_initial:
-        #     for net_id, net in nets.items():
-        #         net.load_state_dict(global_para)
-
-        for round in range(args.comm_round):
-            logger.info("in comm round:" + str(round))
-
-            # arr = np.arange(args.n_parties)
-            # np.random.shuffle(arr)
-            # selected = arr[:int(args.n_parties * args.sample)]
-
-            #global_para = global_model.state_dict()
-            # if round == 0:
-            #     if args.is_same_initial:
-            #         for idx in selected:
-            #             nets[idx].load_state_dict(global_para)
-            # else:
-            #     for idx in selected:
-            #         nets[idx].load_state_dict(global_para)
-            subnets = {net_i:net for net_i,net in nets.items() if net in [n.model for n in list(G0.nodes)]}
-            selected = [net_i for net_i,_ in subnets.items()]
-            _, avg_local_train_acc, avg_local_test_acc = local_train_net(subnets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
-            # local_train_net(nets, args, net_dataidx_map, local_split=False, device=device)
-
-            # update global model
-            # total_data_points = sum([len(net_dataidx_map[r]) for r in selected])
-            # fed_avg_freqs = [len(net_dataidx_map[r]) / total_data_points for r in selected]
-
-            # for idx in range(len(selected)):
-            #     net_para = nets[selected[idx]].cpu().state_dict()
-            #     if idx == 0:
-            #         for key in net_para:
-            #             global_para[key] = net_para[key] * fed_avg_freqs[idx]
-            #     else:
-            #         for key in net_para:
-            #             global_para[key] += net_para[key] * fed_avg_freqs[idx]
-            # global_model.load_state_dict(global_para)
-
-
-            logger.info('global n_training: %d' % len(train_dl_global))
-            logger.info('global n_test: %d' % len(test_dl_global))
-
-            #Update p2p nodes
-            ripple_updates(G0)
-
-            avg_global_train_acc, avg_global_test_acc = 0.0, 0.0
-            for idx,net in subnets.items():
-                avg_global_train_acc += compute_accuracy(net, train_dl_global,get_confusion_matrix=False, device=device)
-                test_acc, conf_matrix = compute_accuracy(net, test_dl_global, get_confusion_matrix=True, device=device)
-                avg_global_test_acc += test_acc
-            
-            avg_global_train_acc /= len(subnets)
-            avg_global_test_acc /= len(subnets)
-
-            logger.info('>> Avg Local Train accuracy: %f' % avg_local_train_acc)
-            logger.info('>> Avg Local Test accuracy: %f' % avg_local_test_acc)
-            logger.info('>> Avg Global Train accuracy: %f' % avg_global_train_acc)
-            logger.info('>> Avg Global Test accuracy: %f' % avg_global_test_acc)
-
-
-    elif args.alg == 'fedprox':
-        logger.info("Initializing nets")
-        nets, local_model_meta_data, layer_type = init_nets(args.net_config, args.dropout_p, args.n_parties, args)
-        global_models, global_model_meta_data, global_layer_type = init_nets(args.net_config, 0, 1, args)
-        global_model = global_models[0]
-
-        global_para = global_model.state_dict()
-
-        if args.is_same_initial:
-            for net_id, net in nets.items():
-                net.load_state_dict(global_para)
-
-        for round in range(args.comm_round):
-            logger.info("in comm round:" + str(round))
-
-            arr = np.arange(args.n_parties)
-            np.random.shuffle(arr)
-            selected = arr[:int(args.n_parties * args.sample)]
-
-            global_para = global_model.state_dict()
-            if round == 0:
-                if args.is_same_initial:
-                    for idx in selected:
-                        nets[idx].load_state_dict(global_para)
-            else:
-                for idx in selected:
-                    nets[idx].load_state_dict(global_para)
-
-            local_train_net_fedprox(nets, selected, global_model, args, net_dataidx_map, test_dl = test_dl_global, device=device)
-            global_model.to('cpu')
-
-            # update global model
-            total_data_points = sum([len(net_dataidx_map[r]) for r in selected])
-            fed_avg_freqs = [len(net_dataidx_map[r]) / total_data_points for r in selected]
-
-            for idx in range(len(selected)):
-                net_para = nets[selected[idx]].cpu().state_dict()
-                if idx == 0:
-                    for key in net_para:
-                        global_para[key] = net_para[key] * fed_avg_freqs[idx]
-                else:
-                    for key in net_para:
-                        global_para[key] += net_para[key] * fed_avg_freqs[idx]
-            global_model.load_state_dict(global_para)
-
-
-            logger.info('global n_training: %d' % len(train_dl_global))
-            logger.info('global n_test: %d' % len(test_dl_global))
-
-
-            train_acc = compute_accuracy(global_model, train_dl_global)
-            test_acc, conf_matrix = compute_accuracy(global_model, test_dl_global, get_confusion_matrix=True)
-
-
-            logger.info('>> Global Model Train accuracy: %f' % train_acc)
-            logger.info('>> Global Model Test accuracy: %f' % test_acc)
-
-    elif args.alg == 'scaffold':
-        logger.info("Initializing nets")
-        nets, local_model_meta_data, layer_type = init_nets(args.net_config, args.dropout_p, args.n_parties, args)
-        global_models, global_model_meta_data, global_layer_type = init_nets(args.net_config, 0, 1, args)
-        global_model = global_models[0]
-
-        c_nets, _, _ = init_nets(args.net_config, args.dropout_p, args.n_parties, args)
-        c_globals, _, _ = init_nets(args.net_config, 0, 1, args)
-        c_global = c_globals[0]
-        c_global_para = c_global.state_dict()
-        for net_id, net in c_nets.items():
-            net.load_state_dict(c_global_para)
-
-        global_para = global_model.state_dict()
-        if args.is_same_initial:
-            for net_id, net in nets.items():
-                net.load_state_dict(global_para)
-
-
-        for round in range(args.comm_round):
-            logger.info("in comm round:" + str(round))
-
-            arr = np.arange(args.n_parties)
-            np.random.shuffle(arr)
-            selected = arr[:int(args.n_parties * args.sample)]
-
-            global_para = global_model.state_dict()
-            if round == 0:
-                if args.is_same_initial:
-                    for idx in selected:
-                        nets[idx].load_state_dict(global_para)
-            else:
-                for idx in selected:
-                    nets[idx].load_state_dict(global_para)
-
-            local_train_net_scaffold(nets, selected, global_model, c_nets, c_global, args, net_dataidx_map, test_dl = test_dl_global, device=device)
-            # local_train_net(nets, args, net_dataidx_map, local_split=False, device=device)
-
-            # update global model
-            total_data_points = sum([len(net_dataidx_map[r]) for r in selected])
-            fed_avg_freqs = [len(net_dataidx_map[r]) / total_data_points for r in selected]
-
-            for idx in range(len(selected)):
-                net_para = nets[selected[idx]].cpu().state_dict()
-                if idx == 0:
-                    for key in net_para:
-                        global_para[key] = net_para[key] * fed_avg_freqs[idx]
-                else:
-                    for key in net_para:
-                        global_para[key] += net_para[key] * fed_avg_freqs[idx]
-            global_model.load_state_dict(global_para)
-
-
-            logger.info('global n_training: %d' % len(train_dl_global))
-            logger.info('global n_test: %d' % len(test_dl_global))
-
-            global_model.to('cpu')
-            train_acc = compute_accuracy(global_model, train_dl_global)
-            test_acc, conf_matrix = compute_accuracy(global_model, test_dl_global, get_confusion_matrix=True)
-
-
-            logger.info('>> Global Model Train accuracy: %f' % train_acc)
-            logger.info('>> Global Model Test accuracy: %f' % test_acc)
-
-    elif args.alg == 'fednova':
-        logger.info("Initializing nets")
-        nets, local_model_meta_data, layer_type = init_nets(args.net_config, args.dropout_p, args.n_parties, args)
-        global_models, global_model_meta_data, global_layer_type = init_nets(args.net_config, 0, 1, args)
-        global_model = global_models[0]
-
-        d_list = [copy.deepcopy(global_model.state_dict()) for i in range(args.n_parties)]
-        d_total_round = copy.deepcopy(global_model.state_dict())
-        for i in range(args.n_parties):
-            for key in d_list[i]:
-                d_list[i][key] = 0
-        for key in d_total_round:
-            d_total_round[key] = 0
-
-        data_sum = 0
-        for i in range(args.n_parties):
-            data_sum += len(traindata_cls_counts[i])
-        portion = []
-        for i in range(args.n_parties):
-            portion.append(len(traindata_cls_counts[i]) / data_sum)
-
-        global_para = global_model.state_dict()
-        if args.is_same_initial:
-            for net_id, net in nets.items():
-                net.load_state_dict(global_para)
-
-        for round in range(args.comm_round):
-            logger.info("in comm round:" + str(round))
-
-            arr = np.arange(args.n_parties)
-            np.random.shuffle(arr)
-            selected = arr[:int(args.n_parties * args.sample)]
-
-            global_para = global_model.state_dict()
-            if round == 0:
-                if args.is_same_initial:
-                    for idx in selected:
-                        nets[idx].load_state_dict(global_para)
-            else:
-                for idx in selected:
-                    nets[idx].load_state_dict(global_para)
-
-            _, a_list, d_list, n_list = local_train_net_fednova(nets, selected, global_model, args, net_dataidx_map, test_dl = test_dl_global, device=device)
-            total_n = sum(n_list)
-            #print("total_n:", total_n)
-            d_total_round = copy.deepcopy(global_model.state_dict())
-            for key in d_total_round:
-                d_total_round[key] = 0.0
-
-            for i in range(len(selected)):
-                d_para = d_list[i]
-                for key in d_para:
-                    #if d_total_round[key].type == 'torch.LongTensor':
-                    #    d_total_round[key] += (d_para[key] * n_list[i] / total_n).type(torch.LongTensor)
-                    #else:
-                    d_total_round[key] += d_para[key] * n_list[i] / total_n
-
-
-            # for i in range(len(selected)):
-            #     d_total_round = d_total_round + d_list[i] * n_list[i] / total_n
-
-            # local_train_net(nets, args, net_dataidx_map, local_split=False, device=device)
-
-            # update global model
-            coeff = 0.0
-            for i in range(len(selected)):
-                coeff = coeff + a_list[i] * n_list[i]/total_n
-
-            updated_model = global_model.state_dict()
-            for key in updated_model:
-                #print(updated_model[key])
-                if updated_model[key].type() == 'torch.LongTensor':
-                    updated_model[key] -= (coeff * d_total_round[key]).type(torch.LongTensor)
-                elif updated_model[key].type() == 'torch.cuda.LongTensor':
-                    updated_model[key] -= (coeff * d_total_round[key]).type(torch.cuda.LongTensor)
-                else:
-                    #print(updated_model[key].type())
-                    #print((coeff*d_total_round[key].type()))
-                    updated_model[key] -= coeff * d_total_round[key]
-            global_model.load_state_dict(updated_model)
-
-
-            logger.info('global n_training: %d' % len(train_dl_global))
-            logger.info('global n_test: %d' % len(test_dl_global))
-
-            global_model.to('cpu')
-            train_acc = compute_accuracy(global_model, train_dl_global)
-            test_acc, conf_matrix = compute_accuracy(global_model, test_dl_global, get_confusion_matrix=True)
-
-
-            logger.info('>> Global Model Train accuracy: %f' % train_acc)
-            logger.info('>> Global Model Test accuracy: %f' % test_acc)
-
-    elif args.alg == 'local_training':
-        logger.info("Initializing nets")
-        nets, local_model_meta_data, layer_type = init_nets(args.net_config, args.dropout_p, args.n_parties, args)
+    logger.info("Initializing nets")
+    nets, local_model_meta_data, layer_type = init_nets(args.net_config, args.dropout_p, args.n_parties, args)
+    # global_models, global_model_meta_data, global_layer_type = init_nets(args.net_config, 0, 1, args)
+    # global_model = global_models[0]
+
+    #Initialize the p2p graph
+    adj_list = [Node(idx,net,net_dataidx_map[idx],MAX_PEERS) for idx,net in nets.items()]
+
+    #Initialize node caches
+    CACHE = {n.id:set() for n in adj_list}
+
+    #Initialize val preds cache
+    cache_val_preds = {n.id:None for n in adj_list}
+
+    #Construct G0 using the template graph
+    G0 = nx.Graph()
+    for u,v in GT.edges:
+        G0.add_edge(adj_list[u],adj_list[v])
+    
+    print("TOPOLOGY:",TOPOLOGY)
+    
+    if TOPOLOGY != "complete":
+        #Pretrain selected nodes to compute local gradients for 10 epochs
         arr = np.arange(args.n_parties)
-        local_train_net(nets, arr, args, net_dataidx_map, test_dl = test_dl_global, device=device)
+        np.random.shuffle(arr)
+        selected = arr[:int(args.n_parties * args.sample)]
+        local_pre_training(nets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
 
-    elif args.alg == 'all_in':
-        nets, local_model_meta_data, layer_type = init_nets(args.net_config, args.dropout_p, 1, args)
-        n_epoch = args.epochs
+        #Topology morphing
+        update_matrix(G0,SIM_MATRIX,CACHE,cache_val_preds,adj_list,sim=SIMILARITY,val_dl=val_dl_global,device=device)
 
-        trainacc, testacc = train_net(0, nets[0], train_dl_global, test_dl_global, n_epoch, args.lr, args.optimizer, False, device=device)
+        count = 1
+        while size(SIM_MATRIX) < NODES ** 2:
+            print("\nMATRIX i="+ str(count) +": size=",size(SIM_MATRIX))
+            G0 = BFTM(G0,SIM_MATRIX,CACHE,MAX_PEERS)
+            update_matrix(G0,SIM_MATRIX,CACHE,cache_val_preds,adj_list,sim=SIMILARITY,val_dl=val_dl_global,device=device)
+            count += 1
 
-        logger.info("All in test acc: %f" % testacc)
+        #show(SIM_MATRIX)
+        print("\nFINAL MATRIX i="+ str(count - 1) +": size=",size(SIM_MATRIX))
+
+        matrix = []
+        for _,row1 in sorted(SIM_MATRIX.items()):
+            temp = []
+            for val,row2 in sorted(row1.items()):
+                temp.append(row2)
+            matrix.append(temp)
+
+        #print(matrix)
+        matrix = np.array(matrix)
+        print("matrix.shape:",matrix.shape)
+
+        print("Clustering sim matrix...")
+        #Cluster peers
+        kmeans = KMeans(n_clusters=MAX_PEERS, random_state=0).fit(matrix)
+
+        labels = {i:[] for i in range(MAX_PEERS)}
+        for idx,label in enumerate(kmeans.labels_):
+            labels[label].append(adj_list[idx])
+
+        print("Labels:")
+        for k,v in labels.items():
+            print("\t",k,":",len(v))
+        print("\tTotal:",len(kmeans.labels_))
+
+        #Plot clusters
+        pca = PCA(2)
+        print("matrix.shape",matrix.shape)
+        x_rads = matrix
+        print("x_rads.shape:",x_rads.shape)
+        df_rads = pca.fit_transform(x_rads)
+        print("df_rads.shape",df_rads.shape)
+        label_rads = kmeans.labels_
+        print("label_rads.shape",label_rads.shape)
+        u_labels_rads = np.unique(label_rads)
+        for i in u_labels_rads:
+            plt.scatter(df_rads[label_rads == i , 0] , df_rads[label_rads == i , 1] , label = i)
+        plt.legend()
+        plt.savefig(args.logdir + "kmeans.png")
+        plt.close()
+        #plt.show()
+
+        #Generate random labels for random strategy
+        rand_labels = [i for i in list(kmeans.labels_)]
+        random.shuffle(rand_labels)
+
+        #Construct tree
+        if TOPOLOGY == "tree":
+            if STRATEGY == "rand":
+                G0 = BFTM_(adj_list,rand_labels)
+            else:
+                G0 = BFTM_(adj_list,list(kmeans.labels_))
+        elif TOPOLOGY == "clique":
+            if STRATEGY == "rand":
+                G0 = m_cliques(adj_list,rand_labels)
+            else:
+                G0 = m_cliques(adj_list,list(kmeans.labels_))
+        elif TOPOLOGY == "pcc": #pcc (per cluster clique) topology creates one cluster per clique
+            if STRATEGY == "rand":
+                G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_rand",CUT)
+            else:
+                G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_optim",CUT)
+        elif TOPOLOGY == "sample":
+            if STRATEGY == "rand":
+                G0 = m_cliques(adj_list,list(kmeans.labels_),"sample_rand")
+            else:
+                G0 = m_cliques(adj_list,list(kmeans.labels_),"sample_optim")
+            print("Sampling done. G0.nodes:",G0.number_of_nodes())
+            print("G0 labels: ",[kmeans.labels_[n.id] for n in list(G0.nodes)])
+        else:
+            if STRATEGY == "rand":
+                G0 = m_cliques(adj_list,rand_labels,"ring")
+            else:
+                G0 = m_cliques(adj_list,list(kmeans.labels_),"ring")
+
+        nx.draw(G0,node_color=[kmeans.labels_[n.id]/len(kmeans.labels_) for n in list(G0.nodes)])
+        plt.savefig(args.logdir + "graph.png")
+    else:
+        nx.draw(G0)
+        plt.savefig(args.logdir + "graph.png")
+    
+    #Edit below to initialize all peers with same random weights
+    # global_para = global_model.state_dict()
+    # if args.is_same_initial:
+    #     for net_id, net in nets.items():
+    #         net.load_state_dict(global_para)
+
+    for round in range(args.comm_round):
+        logger.info("in comm round:" + str(round))
+
+        # arr = np.arange(args.n_parties)
+        # np.random.shuffle(arr)
+        # selected = arr[:int(args.n_parties * args.sample)]
+
+        #global_para = global_model.state_dict()
+        # if round == 0:
+        #     if args.is_same_initial:
+        #         for idx in selected:
+        #             nets[idx].load_state_dict(global_para)
+        # else:
+        #     for idx in selected:
+        #         nets[idx].load_state_dict(global_para)
+        subnets = {net_i:net for net_i,net in nets.items() if net in [n.model for n in list(G0.nodes)]}
+        selected = [net_i for net_i,_ in subnets.items()]
+        _, avg_local_train_acc, avg_local_test_acc = local_train_net(subnets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
+        # local_train_net(nets, args, net_dataidx_map, local_split=False, device=device)
+
+        # update global model
+        # total_data_points = sum([len(net_dataidx_map[r]) for r in selected])
+        # fed_avg_freqs = [len(net_dataidx_map[r]) / total_data_points for r in selected]
+
+        # for idx in range(len(selected)):
+        #     net_para = nets[selected[idx]].cpu().state_dict()
+        #     if idx == 0:
+        #         for key in net_para:
+        #             global_para[key] = net_para[key] * fed_avg_freqs[idx]
+        #     else:
+        #         for key in net_para:
+        #             global_para[key] += net_para[key] * fed_avg_freqs[idx]
+        # global_model.load_state_dict(global_para)
+
+
+        logger.info('global n_training: %d' % len(train_dl_global))
+        logger.info('global n_test: %d' % len(test_dl_global))
+
+        #Update p2p nodes
+        ripple_updates(G0)
+
+        avg_global_train_acc, avg_global_test_acc = 0.0, 0.0
+        for idx,net in subnets.items():
+            avg_global_train_acc += compute_accuracy(net, train_dl_global,get_confusion_matrix=False, device=device)
+            test_acc, conf_matrix = compute_accuracy(net, test_dl_global, get_confusion_matrix=True, device=device)
+            avg_global_test_acc += test_acc
+        
+        avg_global_train_acc /= len(subnets)
+        avg_global_test_acc /= len(subnets)
+
+        logger.info('>> Avg Local Train accuracy: %f' % avg_local_train_acc)
+        logger.info('>> Avg Local Test accuracy: %f' % avg_local_test_acc)
+        logger.info('>> Avg Global Train accuracy: %f' % avg_global_train_acc)
+        logger.info('>> Avg Global Test accuracy: %f' % avg_global_test_acc)

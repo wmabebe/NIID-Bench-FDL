@@ -2,6 +2,7 @@ import os
 import logging
 import numpy as np
 import torch
+import torchvision
 import torchvision.transforms as transforms
 import torch.utils.data as data
 from torch.autograd import Variable
@@ -9,6 +10,7 @@ import torch.nn.functional as F
 import random
 from sklearn.metrics import confusion_matrix
 from torch.utils.data import DataLoader
+from torch.utils.data.sampler import SubsetRandomSampler
 
 from model import *
 from datasets import MNIST_truncated, CIFAR10_truncated, SVHN_custom, FashionMNIST_truncated, CustomTensorDataset, CelebA_custom, FEMNIST, Generated, genData, CIFAR100_truncated, ImageFolder_custom
@@ -577,6 +579,29 @@ class AddGaussianNoise(object):
     def __repr__(self):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
+def get_val_dataloader(dataset, datadir, datasize, val_bs):
+    if dataset == 'tinyimagenet':
+        random_ids = np.random.randint(10000, size=datasize)
+
+        val_indices = random_ids
+
+        imagenet_mean = [0.485, 0.456, 0.406]
+        imagenet_std = [0.229, 0.224, 0.225]
+
+        val_dl = torch.utils.data.DataLoader(
+            torchvision.datasets.ImageFolder(datadir,
+                                                transform=transforms.Compose([
+                                                transforms.Resize(32), 
+                                                transforms.ToTensor(),
+                                                # Phuong 09/26 change (mean, std) -> same as pretrained imagenet
+                                                transforms.Normalize(mean=imagenet_mean, std=imagenet_std)])),
+            #Phuong 09/26 drop_last=False -> True
+            batch_size=val_bs, drop_last=True, sampler=SubsetRandomSampler(val_indices))
+
+    return val_dl
+
+
+
 def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None, noise_level=0, net_id=None, total=0):
     if dataset in ('mnist', 'femnist', 'fmnist', 'cifar10', 'svhn', 'generated', 'covtype', 'a9a', 'rcv1', 'SUSY'):
         if dataset == 'mnist':
@@ -636,6 +661,26 @@ def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None, noise_lev
             transform_test = transforms.Compose([
                 transforms.ToTensor(),
                 AddGaussianNoise(0., noise_level, net_id, total)])
+
+        elif dataset == 'tinyimagenet':
+        
+            random_ids = np.random.randint(1000, size=datasize)
+
+            train_indices = random_ids
+
+            imagenet_mean = [0.485, 0.456, 0.406]
+            imagenet_std = [0.229, 0.224, 0.225]
+
+            train_dl = torch.utils.data.DataLoader(
+                torchvision.datasets.ImageFolder(datadir,
+                                                transform=transforms.Compose([
+                                                    transforms.Resize(32), 
+                                                    transforms.ToTensor(),
+                                                    # Phuong 09/26 change (mean, std) -> same as pretrained imagenet
+                                                    transforms.Normalize(mean=imagenet_mean, std=imagenet_std)])),
+                #Phuong 09/26 drop_last=False -> True
+                batch_size=train_bs, drop_last=True, sampler=SubsetRandomSampler(train_indices))
+
 
         else:
             dl_obj = Generated
