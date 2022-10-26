@@ -833,35 +833,28 @@ def get_preds(model, dataloader, device="cpu"):
         model.eval()
         was_training = True
 
-    true_labels_list, pred_labels_list = np.array([]), np.array([])
+    pred_labels_list = np.array([])
 
     if type(dataloader) == type([1]):
         pass
     else:
         dataloader = [dataloader]
 
-    correct, total = 0, 0
     with torch.no_grad():
         for tmp in dataloader:
             for batch_idx, (x, target) in enumerate(tmp):
                 x, target = x.to(device), target.to(device,dtype=torch.int64)
                 out = model(x)
-                _, pred_label = torch.max(out.data, 1)
-
-                total += x.data.size()[0]
-                correct += (pred_label == target.data).sum().item()
 
                 if device == "cpu":
-                    pred_labels_list = np.append(pred_labels_list, pred_label.numpy())
-                    true_labels_list = np.append(true_labels_list, target.data.numpy())
+                    pred_labels_list = np.append(pred_labels_list, out.numpy())
                 else:
-                    pred_labels_list = np.append(pred_labels_list, pred_label.cpu().numpy())
-                    true_labels_list = np.append(true_labels_list, target.data.cpu().numpy())
+                    pred_labels_list = np.append(pred_labels_list, out.cpu().numpy())
 
     if was_training:
         model.train()
 
-    return torch.from_numpy(pred_labels_list)
+    return torch.from_numpy(pred_labels_list.reshape(-1,10))
 
 
 def kl_divergence(id1,id2,m1,m2,cache_val_preds,val_dl,device="cpu"):
@@ -873,6 +866,8 @@ def kl_divergence(id1,id2,m1,m2,cache_val_preds,val_dl,device="cpu"):
 
     cache_val_preds[id1] = m1_preds
     cache_val_preds[id2] = m2_preds
+
+    print("PRED SHAPE:", m1_preds.shape)
 
     kl_loss = nn.KLDivLoss(reduction="batchmean")
 
