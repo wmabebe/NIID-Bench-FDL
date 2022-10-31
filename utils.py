@@ -580,9 +580,9 @@ class AddGaussianNoise(object):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
 def get_val_dataloader(dataset, datadir, datasize, val_bs):
+    val_dl = None
     if dataset == 'tinyimagenet':
-        random_ids = np.random.randint(10000, size=datasize)
-
+        random_ids = np.random.randint(100000, size=datasize)
         val_indices = random_ids
 
         imagenet_mean = [0.485, 0.456, 0.406]
@@ -597,6 +597,17 @@ def get_val_dataloader(dataset, datadir, datasize, val_bs):
                                                 transforms.Normalize(mean=imagenet_mean, std=imagenet_std)])),
             #Phuong 09/26 drop_last=False -> True
             batch_size=val_bs, drop_last=True, sampler=SubsetRandomSampler(val_indices))
+    
+    elif dataset == 'fmnist':
+        dl_obj = FashionMNIST_truncated
+        transform_val = transforms.Compose([
+                transforms.ToTensor(),])
+        
+        random_ids = np.random.randint(10000, size=datasize)
+        val_indices = random_ids
+
+        val_ds = dl_obj(datadir, dataidxs=val_indices, train=True, transform=transform_val, download=True)
+        val_dl = torch.utils.data.DataLoader(dataset=val_ds, batch_size=val_bs, shuffle=True, drop_last=False)
 
     return val_dl
 

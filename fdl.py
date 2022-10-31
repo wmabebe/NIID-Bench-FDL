@@ -713,6 +713,7 @@ if __name__ == '__main__':
     IID = args.partition
     SIMILARITY = args.similarity
     CUT = args.cut
+    DATASET = args.dataset
 
     #Create random template graph
     GT = nx.random_regular_graph(d=MAX_PEERS, n=NODES)
@@ -772,20 +773,10 @@ if __name__ == '__main__':
 
     #Split the test into val and test
 
-    val_dl_global = get_val_dataloader("tinyimagenet", "./data/tiny-imagenet-200/", 1000, 32)
-
-    # top = list(range(0, 1000))
-    # bottom = list(range(1000, len(test_ds_global)))
-    # trainset_1 = torch.utils.data.Subset(test_ds_global, top)
-    # trainset_2 = torch.utils.data.Subset(test_ds_global, bottom)
-
-    # print("len trainset_1:", len(trainset_1))
-    # print("len trainset_2:", len(trainset_2))
-
-    # val_dl_global = torch.utils.data.DataLoader(trainset_1, batch_size=32,
-    #                                             shuffle=False, num_workers=2)
-    # test_dl_global = torch.utils.data.DataLoader(trainset_2, batch_size=32,
-    #                                             shuffle=False, num_workers=2)
+    if DATASET in ["cifar10","cifar100"]:
+        val_dl_global = get_val_dataloader("tinyimagenet", "./data/tiny-imagenet-200/", 1000, 32)
+    elif DATASET in ["mnist","femnist"]:
+        val_dl_global = get_val_dataloader("fmnist", "./data/", 1000, 32)
 
     print("len train_dl_global:",len(train_dl_global))
     print("len val_dl_global:",len(val_dl_global))
