@@ -321,7 +321,7 @@ def local_pre_training(nets, selected, args, net_dataidx_map, test_dl = None, de
         sched = args.model in ["res20", "vgg"]
 
         #Pre train for 10 epochs
-        _, _ = train_net(net_id, net, train_dl_local, test_dl, 10, args.lr, args.optimizer, sched, device=device, stash=True)
+        _, _ = train_net(net_id, net, train_dl_local, test_dl, 1, args.lr, args.optimizer, sched, device=device, stash=True)
 
 def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
     avg_acc = 0.0
@@ -714,14 +714,15 @@ if __name__ == '__main__':
     SIMILARITY = args.similarity
     CUT = args.cut
     DATASET = args.dataset
+    NOISE = args.noise
 
     #Create random template graph
     GT = nx.random_regular_graph(d=MAX_PEERS, n=NODES)
 
 
     #Create output directory
-    args.logdir = './logs/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_rounds[{}]_topology[{}]_strategy[{}]_cut[{}]_similarity[{}]_frac[{}]_local_ep[{}]_local_bs[{}]/'. \
-        format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS, args.comm_round,TOPOLOGY,STRATEGY,CUT,SIMILARITY, args.sample,args.epochs, args.batch_size)
+    args.logdir = './logs/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_rounds[{}]_topology[{}]_strategy[{}]_cut[{}]_similarity[{}]_frac[{}]_local_ep[{}]_local_bs[{}]_noise[{}]/'. \
+        format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS, args.comm_round,TOPOLOGY,STRATEGY,CUT,SIMILARITY, args.sample,args.epochs, args.batch_size, args.noise)
     os.makedirs(os.path.dirname(args.logdir), exist_ok=True)
 
     
