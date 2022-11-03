@@ -321,7 +321,7 @@ def local_pre_training(nets, selected, args, net_dataidx_map, test_dl = None, de
         sched = args.model in ["res20", "vgg"]
 
         #Pre train for 10 epochs
-        _, _ = train_net(net_id, net, train_dl_local, test_dl, 1, args.lr, args.optimizer, sched, device=device, stash=True)
+        _, _ = train_net(net_id, net, train_dl_local, test_dl, 10, args.lr, args.optimizer, sched, device=device, stash=True)
 
 def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
     avg_acc = 0.0
