@@ -40,6 +40,7 @@ def get_args():
     parser.add_argument('--batch_size', type=int, default=64, help='input batch size for training (default: 64)')
     parser.add_argument('--lr', type=float, default=0.01, help='learning rate (default: 0.01)')
     parser.add_argument('--epochs', type=int, default=5, help='number of local epochs')
+    parser.add_argument('--pre_epochs', type=int, default=10, help='number of local pre train epochs')
     parser.add_argument('--n_parties', type=int, default=2,  help='number of workers in a distributed cluster')
     parser.add_argument('--alg', type=str, default='fedavg',
                             help='communication strategy: fedavg/fedprox')
@@ -297,7 +298,7 @@ def view_image(train_dataloader):
         print(x.shape)
         exit(0)
 
-def local_pre_training(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
+def local_pre_training(nets, selected, args, net_dataidx_map, pre_epochs, test_dl = None, device="cpu"):
     for net_id, net in nets.items():
         if net_id not in selected:
             continue
@@ -321,7 +322,7 @@ def local_pre_training(nets, selected, args, net_dataidx_map, test_dl = None, de
         sched = args.model in ["res20", "vgg"]
 
         #Pre train for 10 epochs
-        _, _ = train_net(net_id, net, train_dl_local, test_dl, 10, args.lr, args.optimizer, sched, device=device, stash=True)
+        _, _ = train_net(net_id, net, train_dl_local, test_dl, pre_epochs, args.lr, args.optimizer, sched, device=device, stash=True)
 
 def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
     avg_acc = 0.0
@@ -837,7 +838,7 @@ if __name__ == '__main__':
         arr = np.arange(args.n_parties)
         np.random.shuffle(arr)
         selected = arr[:int(args.n_parties * args.sample)]
-        local_pre_training(nets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
+        local_pre_training(nets, selected, args, net_dataidx_map, args.pre_epochs, test_dl = test_dl_global, device=device)
 
         #Topology morphing
         update_matrix(G0,SIM_MATRIX,CACHE,cache_val_preds,adj_list,sim=SIMILARITY,val_dl=val_dl_global,device=device)
