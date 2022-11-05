@@ -116,6 +116,8 @@ def init_nets(net_configs, dropout_p, n_parties, args):
                 net = ModerateCNN(output_dim=2)
         elif args.model == "resnet":
             net = ResNet50_cifar10()
+        elif args.model == "res18":
+            net = torchvision.models.resnet18()
         elif args.model == 'res20':
             net = resnet20()
         elif args.model == "vgg16":
@@ -322,7 +324,7 @@ def local_pre_training(nets, selected, args, net_dataidx_map, pre_epochs, test_d
         sched = args.model in ["res20", "vgg"]
 
         #Pre train for 10 epochs
-        _, _ = train_net(net_id, net, train_dl_local, test_dl, pre_epochs, args.lr, args.optimizer, sched, device=device, stash=True)
+        _, _ = train_net(net_id, net, train_dl_local, test_dl, pre_epochs, args.lr, args.optimizer, sched, device=device, stash=args.similarity == "grad")
 
 def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
     avg_acc = 0.0
