@@ -119,6 +119,15 @@ def init_nets(net_configs, dropout_p, n_parties, args):
             net = ResNet50_cifar10()
         elif args.model == "res18":
             net = torchvision.models.resnet18()
+            #Finetune Final layers to adjust for tiny imagenet input
+            if args.dataset == "tinyimagenet":                
+                net.avgpool = nn.AdaptiveAvgPool2d(1)
+                num_ftrs = net.fc.in_features
+                net.fc = nn.Linear(num_ftrs, 200)
+            elif args.dataset in ["cifar10"]:
+                net.avgpool = nn.AdaptiveAvgPool2d(1)
+                num_ftrs = net.fc.in_features
+                net.fc = nn.Linear(num_ftrs, 10)
         elif args.model == 'res20':
             net = resnet20()
         elif args.model == "vgg16":
@@ -168,6 +177,7 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
     for epoch in range(epochs):
         epoch_loss_collector = []
         last_td = len(train_dataloader) - 1
+        # print ("Epoch", epoch)
         for idx,tmp in enumerate(train_dataloader):
             last_batch = len(tmp) - 1
             for batch_idx, (x, target) in enumerate(tmp):
@@ -182,6 +192,7 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
                 loss = criterion(out, target)
 
                 loss.backward()
+                # print ("\t batch " + str(batch_idx) +" trained")
                 #Collect grads here if in pretraining (stash) mode!
                 if stash and epoch == epochs - 1 and idx == last_td and batch_idx == last_batch:
                     net.stash_grads()
@@ -407,18 +418,26 @@ if __name__ == '__main__':
     torch.manual_seed(seed)
     random.seed(seed)
     logger.info("Partitioning data")
+    print("Datadir:", args.datadir)
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(
         args.dataset, args.datadir, args.logdir, args.partition, args.n_parties, beta=args.beta)
 
     n_classes = len(np.unique(y_train))
+    args.datadir = args.datadir + "tiny-imagenet-200/" if args.dataset == "tinyimagenet" else args.datadir
+    print("#classes:",n_classes)
+    print("#X_train:",len(X_train))
+    print("#X_test:",len(X_test))
+    print("#netidxmap",len(net_dataidx_map))
+    for i,net in enumerate(net_dataidx_map):
+        print("\t#netidxmap["+str(i)+"]",len(net_dataidx_map[i]))
 
     train_dl_global, test_dl_global, train_ds_global, test_ds_global = get_dataloader(args.dataset,
                                                                                         args.datadir,
                                                                                         args.batch_size,
                                                                                         32)
 
-    print("len train_ds_global:", len(train_ds_global))
-    print("len test_ds_global:", len(test_ds_global))
+    print("len train_ds_global:", len(train_ds_global) if train_ds_global else train_ds_global)
+    print("len test_ds_global:", len(test_ds_global) if test_ds_global else test_ds_global)
 
     #Split the test into val and test
 
@@ -426,13 +445,12 @@ if __name__ == '__main__':
         val_dl_global = get_val_dataloader("tinyimagenet", "./data/tiny-imagenet-200/", 1000, 32)
     elif DATASET in ["mnist","femnist"]:
         val_dl_global = get_val_dataloader("fmnist", "./data/", 1000, 32)
+    elif DATASET in ["tinyimagenet"]:
+         val_dl_global = get_val_dataloader("cifar10", "./data/", 1000, 32)
 
     print("len train_dl_global:",len(train_dl_global))
     print("len val_dl_global:",len(val_dl_global))
     print("len test_dl_global:",len(test_dl_global))
-
-
-    data_size = len(test_ds_global)
 
     # test_dl = data.DataLoader(dataset=test_ds_global, batch_size=32, shuffle=False)
 
@@ -463,6 +481,8 @@ if __name__ == '__main__':
     nets, local_model_meta_data, layer_type = init_nets(args.net_config, args.dropout_p, args.n_parties, args)
     # global_models, global_model_meta_data, global_layer_type = init_nets(args.net_config, 0, 1, args)
     # global_model = global_models[0]
+
+    print(nets[0])
 
     #Initialize the p2p graph
     adj_list = [Node(idx,net,net_dataidx_map[idx],MAX_PEERS) for idx,net in nets.items()]

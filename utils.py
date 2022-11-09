@@ -159,8 +159,8 @@ def load_cifar100_data(datadir):
 
 def load_tinyimagenet_data(datadir):
     transform = transforms.Compose([transforms.ToTensor()])
-    xray_train_ds = ImageFolder_custom(datadir+'./train/', transform=transform)
-    xray_test_ds = ImageFolder_custom(datadir+'./val/', transform=transform)
+    xray_train_ds = ImageFolder_custom(datadir+'tiny-imagenet-200/train/', transform=transform)
+    xray_test_ds = ImageFolder_custom(datadir+'tiny-imagenet-200/val/', transform=transform)
 
     X_train, y_train = np.array([s[0] for s in xray_train_ds.samples]), np.array([int(s[1]) for s in xray_train_ds.samples])
     X_test, y_test = np.array([s[0] for s in xray_test_ds.samples]), np.array([int(s[1]) for s in xray_test_ds.samples])
@@ -201,6 +201,8 @@ def partition_data(dataset, datadir, logdir, partition, n_parties, beta=0.4):
         X_train, y_train, X_test, y_test = load_cifar100_data(datadir)
     elif dataset == 'tinyimagenet':
         X_train, y_train, X_test, y_test = load_tinyimagenet_data(datadir)
+        print("y_train",y_train.shape)
+        print("y_test",y_test.shape)
 
     elif dataset == 'generated':
         X_train, y_train = [], []
@@ -312,6 +314,8 @@ def partition_data(dataset, datadir, logdir, partition, n_parties, beta=0.4):
         K = 10
         if dataset in ('celeba', 'covtype', 'a9a', 'rcv1', 'SUSY'):
             K = 2
+        if dataset in ('tinyimagenet'):
+            K = 200
             # min_require_size = 100
 
         N = y_train.shape[0]
@@ -608,13 +612,36 @@ def get_val_dataloader(dataset, datadir, datasize, val_bs):
 
         val_ds = dl_obj(datadir, dataidxs=val_indices, train=True, transform=transform_val, download=True)
         val_dl = torch.utils.data.DataLoader(dataset=val_ds, batch_size=val_bs, shuffle=True, drop_last=False)
+    
+    elif dataset == "cifar10":
+        dl_obj = CIFAR10_truncated
+        transform_val = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Lambda(lambda x: F.pad(
+                    Variable(x.unsqueeze(0), requires_grad=False),
+                    (4, 4, 4, 4), mode='reflect').data.squeeze()),
+                transforms.ToPILImage(),
+                transforms.RandomCrop(32, padding=4),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                # Phuong 09/26 change (mean, std) -> same as pretrained imagenet
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+
+            ])
+        random_ids = np.random.randint(10000, size=datasize)
+        val_indices = random_ids
+
+        val_ds = dl_obj(datadir, dataidxs=val_indices, train=True, transform=transform_val, download=True)
+        val_dl = torch.utils.data.DataLoader(dataset=val_ds, batch_size=val_bs, shuffle=True, drop_last=False)
+
 
     return val_dl
 
 
 
 def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None, noise_level=0, net_id=None, total=0):
-    if dataset in ('mnist', 'femnist', 'fmnist', 'cifar10', 'svhn', 'generated', 'covtype', 'a9a', 'rcv1', 'SUSY'):
+    if dataset in ('mnist', 'femnist', 'fmnist', 'cifar10', 'svhn', 'generated', 'covtype', 'a9a', 'rcv1', 'SUSY','tinyimagenet'):
         if dataset == 'mnist':
             dl_obj = MNIST_truncated
 
@@ -673,24 +700,34 @@ def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None, noise_lev
                 transforms.ToTensor(),
                 AddGaussianNoise(0., noise_level, net_id, total)])
 
-        elif dataset == 'tinyimagenet':
-        
-            random_ids = np.random.randint(1000, size=datasize)
-
-            train_indices = random_ids
+        elif dataset == 'tinyimagenet':        
+            # random_ids = np.random.randint(1000, size=datasize)
+            # train_indices = random_ids
 
             imagenet_mean = [0.485, 0.456, 0.406]
             imagenet_std = [0.229, 0.224, 0.225]
 
             train_dl = torch.utils.data.DataLoader(
-                torchvision.datasets.ImageFolder(datadir,
+                torchvision.datasets.ImageFolder(datadir +"/train",
                                                 transform=transforms.Compose([
                                                     transforms.Resize(32), 
                                                     transforms.ToTensor(),
                                                     # Phuong 09/26 change (mean, std) -> same as pretrained imagenet
                                                     transforms.Normalize(mean=imagenet_mean, std=imagenet_std)])),
                 #Phuong 09/26 drop_last=False -> True
-                batch_size=train_bs, drop_last=True, sampler=SubsetRandomSampler(train_indices))
+                batch_size=train_bs, drop_last=True)
+            
+            test_dl = torch.utils.data.DataLoader(
+                torchvision.datasets.ImageFolder(datadir +"/test",
+                                                transform=transforms.Compose([
+                                                    transforms.Resize(32), 
+                                                    transforms.ToTensor(),
+                                                    # Phuong 09/26 change (mean, std) -> same as pretrained imagenet
+                                                    transforms.Normalize(mean=imagenet_mean, std=imagenet_std)])),
+                #Phuong 09/26 drop_last=False -> True
+                batch_size=test_bs, drop_last=True)
+
+            return train_dl, test_dl, None, None
 
 
         else:
