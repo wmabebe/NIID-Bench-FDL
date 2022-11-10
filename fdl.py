@@ -56,6 +56,7 @@ def get_args():
     parser.add_argument('--device', type=str, default='cuda:0', help='The device to run the program')
     parser.add_argument('--log_file_name', type=str, default=None, help='The log file name')
     parser.add_argument('--optimizer', type=str, default='sgd', help='the optimizer')
+    parser.add_argument('--pretrained', type=int, default=0, help='Load pretrained model')
     parser.add_argument('--mu', type=float, default=1, help='the mu parameter for fedprox')
     parser.add_argument('--noise', type=float, default=0, help='how much noise we add to some party')
     parser.add_argument('--noise_type', type=str, default='level', help='Different level of noise or different space of noise')
@@ -118,7 +119,7 @@ def init_nets(net_configs, dropout_p, n_parties, args):
         elif args.model == "resnet":
             net = ResNet50_cifar10()
         elif args.model == "res18":
-            net = torchvision.models.resnet18()
+            net = torchvision.models.resnet18(pretrained=args.pretrained == 1)
             #Finetune Final layers to adjust for tiny imagenet input
             if args.dataset == "tinyimagenet":                
                 net.avgpool = nn.AdaptiveAvgPool2d(1)
