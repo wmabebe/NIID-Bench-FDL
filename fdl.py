@@ -290,7 +290,7 @@ def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, devic
         train_dl_global, test_dl_global, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32)
         n_epoch = args.epochs
 
-        sched = args.model in ["res20", "vgg"]
+        sched = args.model in ["res20", "vgg","res18"]
 
         trainacc, testacc = train_net(net_id, net, train_dl_local, test_dl, n_epoch, args.lr, args.optimizer, sched, device=device, accuracy=args.local_acc)
         if args.local_acc:
