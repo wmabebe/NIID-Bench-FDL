@@ -771,7 +771,7 @@ def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None, noise_lev
         train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
         test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
 
-        train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=False)
+        train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last= dataset in ['cifar100'])
         test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=False)
 
     return train_dl, test_dl, train_ds, test_ds
