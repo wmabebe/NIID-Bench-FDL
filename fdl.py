@@ -125,6 +125,10 @@ def init_nets(net_configs, dropout_p, n_parties, args):
                 net.avgpool = nn.AdaptiveAvgPool2d(1)
                 num_ftrs = net.fc.in_features
                 net.fc = nn.Linear(num_ftrs, 200)
+            elif args.dataset == "cifar100":
+                net.avgpool = nn.AdaptiveAvgPool2d(1)
+                num_ftrs = net.fc.in_features
+                net.fc = nn.Linear(num_ftrs, 100)
             elif args.dataset in ["cifar10"]:
                 net.avgpool = nn.AdaptiveAvgPool2d(1)
                 num_ftrs = net.fc.in_features

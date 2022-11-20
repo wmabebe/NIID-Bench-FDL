@@ -142,6 +142,7 @@ def load_femnist_data(datadir):
 
     return (X_train, y_train, u_train, X_test, y_test, u_test)
 
+
 def load_cifar100_data(datadir):
     transform = transforms.Compose([transforms.ToTensor()])
 
@@ -314,9 +315,11 @@ def partition_data(dataset, datadir, logdir, partition, n_parties, beta=0.4):
         K = 10
         if dataset in ('celeba', 'covtype', 'a9a', 'rcv1', 'SUSY'):
             K = 2
-        if dataset in ('tinyimagenet'):
+        elif dataset in ('tinyimagenet'):
             K = 200
             # min_require_size = 100
+        elif dataset in ('cifar100'):
+            K = 100
 
         N = y_train.shape[0]
         #np.random.seed(2020)
@@ -356,6 +359,10 @@ def partition_data(dataset, datadir, logdir, partition, n_parties, beta=0.4):
             K = 2
         else:
             K = 10
+        if dataset == "cifar100":
+            K = 100
+        elif dataset == "tinyimagenet":
+            K = 200
         if num == 10:
             net_dataidx_map ={i:np.ndarray(0,dtype=np.int64) for i in range(n_parties)}
             for i in range(10):
@@ -365,7 +372,7 @@ def partition_data(dataset, datadir, logdir, partition, n_parties, beta=0.4):
                 for j in range(n_parties):
                     net_dataidx_map[j]=np.append(net_dataidx_map[j],split[j])
         else:
-            times=[0 for i in range(10)]
+            times=[0 for i in range(K)]
             contain=[]
             for i in range(n_parties):
                 current=[i%K]
@@ -388,6 +395,7 @@ def partition_data(dataset, datadir, logdir, partition, n_parties, beta=0.4):
                     if i in contain[j]:
                         net_dataidx_map[j]=np.append(net_dataidx_map[j],split[ids])
                         ids+=1
+
 
     elif partition == "iid-diff-quantity":
         idxs = np.random.permutation(n_train)
@@ -641,7 +649,7 @@ def get_val_dataloader(dataset, datadir, datasize, val_bs):
 
 
 def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None, noise_level=0, net_id=None, total=0):
-    if dataset in ('mnist', 'femnist', 'fmnist', 'cifar10', 'svhn', 'generated', 'covtype', 'a9a', 'rcv1', 'SUSY','tinyimagenet'):
+    if dataset in ('mnist', 'femnist', 'fmnist', 'cifar10','cifar100', 'svhn', 'generated', 'covtype', 'a9a', 'rcv1', 'SUSY','tinyimagenet'):
         if dataset == 'mnist':
             dl_obj = MNIST_truncated
 
@@ -699,6 +707,30 @@ def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None, noise_lev
             transform_test = transforms.Compose([
                 transforms.ToTensor(),
                 AddGaussianNoise(0., noise_level, net_id, total)])
+        
+        elif dataset == 'cifar100':
+            dl_obj = CIFAR100_truncated
+
+            normalize = transforms.Normalize(mean=[0.5070751592371323, 0.48654887331495095, 0.4409178433670343],
+                                             std=[0.2673342858792401, 0.2564384629170883, 0.27615047132568404])
+            # transform_train = transforms.Compose([
+            #     transforms.RandomCrop(32),
+            #     transforms.RandomHorizontalFlip(),
+            #     transforms.ToTensor(),
+            #     normalize
+            # ])
+            transform_train = transforms.Compose([
+                # transforms.ToPILImage(),
+                transforms.RandomCrop(32, padding=4),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomRotation(15),
+                transforms.ToTensor(),
+                normalize
+            ])
+            # data prep for test set
+            transform_test = transforms.Compose([
+                transforms.ToTensor(),
+                normalize])
 
         elif dataset == 'tinyimagenet':        
             # random_ids = np.random.randint(1000, size=datasize)
