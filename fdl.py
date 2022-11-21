@@ -385,8 +385,8 @@ if __name__ == '__main__':
 
 
     #Create output directory
-    args.logdir = './logs/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_rounds[{}]_topology[{}]_strategy[{}]_cut[{}]_similarity[{}]_frac[{}]_local_ep[{}]_local_bs[{}]_noise[{}]/'. \
-        format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS, args.comm_round,TOPOLOGY,STRATEGY,CUT,SIMILARITY, args.sample,args.epochs, args.batch_size, args.noise)
+    args.logdir = './logs/{}_{}_{}_{}_nodes[{}]_maxpeers[{}]_rounds[{}]_topology[{}]_strategy[{}]_cut[{}]_similarity[{}]_frac[{}]_local_ep[{}]_local_bs[{}]_beta[{}]_noise[{}]/'. \
+        format(NOW,args.dataset, args.model, IID, NODES, MAX_PEERS, args.comm_round,TOPOLOGY,STRATEGY,CUT,SIMILARITY, args.sample,args.epochs, args.batch_size, args.beta, args.noise)
     os.makedirs(os.path.dirname(args.logdir), exist_ok=True)
 
     
