@@ -1068,6 +1068,9 @@ def pcc_clique(clusters,strategy, labels, cut=0):
                 cliques.append(clique)
     
     for clique in cliques:
+        if len(clique) == 1:
+            G.add_node(clique[0])
+            continue
         for n1 in clique:
             for n2 in clique:
                 if n1 != n2:
@@ -1119,6 +1122,7 @@ def cliques_on_ring(cliques,labels,G, cut=0):
     if cut:
         gap = math.ceil(len(cliques) / cut)
         cuts = [i for i in range(0,len(cliques),gap)]
+        print("CLIQUES:",[len(c) for c in cliques])
         print("CUTS:", cuts)
 
     n1 = random.choice(cliques[0]) 
