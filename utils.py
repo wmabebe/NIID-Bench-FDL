@@ -1116,26 +1116,38 @@ def clique_the_cliques(cliques,labels,G):
                 else:
                     break
 
-def cliques_on_ring(cliques,labels,G, cut=0):
-    cuts = []
-    print("cliques_on_ring CUT:", cut)
-    if cut:
-        gap = math.ceil(len(cliques) / cut)
-        cuts = [i for i in range(0,len(cliques),gap)]
-        print("CLIQUES:",[len(c) for c in cliques])
-        print("CUTS:", cuts)
+def get_partitions(cliques,cut=1):
+    cliques.sort(key=len)
+    k, m = divmod(len(cliques), cut)
+    return list(cliques[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(cut))
 
-    n1 = random.choice(cliques[0]) 
-    for idx,clique in enumerate(cliques):
-        if idx > 0 and idx not in cuts:
-            candidates = [n for n in clique if labels[n.id] != labels[n1.id]]
-            candidates = candidates if len(candidates) > 0 else clique
-            n2 = random.choice(candidates)
-            G.add_edge(n1,n2)
-        n1 = random.choice(clique)
-    
-    #Attach head and tail
-    if 0 not in cuts:
+def cliques_on_ring(cliques,labels,G, cut=0):
+    print("cliques_on_ring CUT:", cut)
+    #if partitions
+    if cut > 1:
+        partitions = get_partitions(cliques,cut)
+        for partition in partitions:
+            if len(partition) > 1:
+                n1 = random.choice(partition[0])
+                for idx,clique in enumerate(partition):
+                    if idx > 0:# and idx not in cuts:
+                        candidates = [n for n in clique if labels[n.id] != labels[n1.id]]
+                        candidates = candidates if len(candidates) > 0 else clique
+                        n2 = random.choice(candidates)
+                        G.add_edge(n1,n2)
+                    n1 = random.choice(clique)
+
+    else:
+        n1 = random.choice(cliques[0]) 
+        for idx,clique in enumerate(cliques):
+            if idx > 0:# and idx not in cuts:
+                candidates = [n for n in clique if labels[n.id] != labels[n1.id]]
+                candidates = candidates if len(candidates) > 0 else clique
+                n2 = random.choice(candidates)
+                G.add_edge(n1,n2)
+            n1 = random.choice(clique)
+        
+        #Attach head and tail cliques
         candidates = [n for n in cliques[0] if labels[n.id] != labels[n1.id]]
         candidates = candidates if len(candidates) > 0 else cliques[0]
         n2 = random.choice(candidates)
