@@ -99,13 +99,13 @@ Here is explanation of parameter for function `get_partition_dict()`.
 ## Leader Board
 
 
-<img src="figures/plots.png" width="800" height="600" /><br/>
+<img src="figures/plots.pdf" width="800" height="600" /><br/>
 
 Blue lines show experiments run with `strategy=optim` to create locally hetergeneous DL graph. Corresponding yellow lines are experiments
 run wth `strategy=rand` to create locally homogeneous DL graph. Furthermore, the table below show nodes in the form `m/n`. When running the
 experiemnts, the `n_parties` argument is set to the `n` value. While the `m` value is automatically set. This happens when setting the `topology`=pcc.
 
-### Non-IID Setting
+### Experiments
 
 | Experiment    |   Dataset      |  Partition |     Non-IID                   |    Model     |   Nodes        | Delta Acc.  |
 | --------------|--------------- | ---------- |------------------------------ | ------------ | -------------- | ------------|
