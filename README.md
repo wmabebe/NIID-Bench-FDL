@@ -99,7 +99,7 @@ Here is explanation of parameter for function `get_partition_dict()`.
 ## Experiments
 
 
-<p><img src="figures/plots.pdf" width="800" height="600" /><p>
+<p><img src="figures/plots.png" width="800" height="600" /><p>
 
 Blue lines show experiments run with `strategy=optim` to create locally hetergeneous DL graph. Corresponding yellow lines are experiments
 run wth `strategy=rand` to create locally homogeneous DL graph. Furthermore, the table below show nodes in the form `m/n`. When running the
