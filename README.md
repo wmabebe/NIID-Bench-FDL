@@ -3,7 +3,7 @@ This repository clonned and transformed the <a href="https://github.com/Xtra-Com
 Here is the original paper on Non-IID FL [Federated Learning on Non-IID Data Silos: An Experimental Study](https://arxiv.org/pdf/2102.02079.pdf).
 
 
-This code implements a Fully Decentralized Learning graph using 3 types of non-IID settings (label distribution skew, feature distribution skew & quantity skew) and 6 datasets (MNIST, Cifar-10, FEMNIST, Cifar-100).
+This code implements a Fully Decentralized Learning graph using 3 types of non-IID settings (label distribution skew, feature distribution skew & quantity skew) and 4 datasets (MNIST, Cifar-10, FEMNIST, Cifar-100).
 
 
 ## Non-IID Settings
@@ -47,8 +47,8 @@ python fdl.py --model=simple-cnn \
 
 | Parameter                      | Description                                 |
 | ----------------------------- | ---------------------------------------- |
-| `model` | The model architecture. Options: `simple-cnn`, `vgg`, `resnet`, `mlp`. Default = `mlp`. |
-| `dataset`      | Dataset to use. Options: `mnist`, `cifar10`, `fmnist`, `svhn`, `generated`, `femnist`, `a9a`, `rcv1`, `covtype`. Default = `mnist`. |
+| `model` | The model architecture. Options: `simple-cnn`,`simple-ffnn`, `vgg`, `res18`, `mlp`. Default = `mlp`. |
+| `dataset`      | Dataset to use. Options: `mnist`, `cifar10`, `femnist`, `cifar100`. Default = `mnist`. |
 | `lr` | Learning rate for the local models, default = `0.01`. |
 | `batch-size` | Batch size, default = `64`. |
 | `epochs` | Number of local training epochs, default = `5`. |
@@ -101,26 +101,27 @@ Here is explanation of parameter for function `get_partition_dict()`.
 
 <img src="figures/plots.png" width="800" height="600" /><br/>
 
+Blue lines show experiments run with `strategy=optim` to create locally hetergeneous DL graph. Corresponding yellow lines are experiments
+run wth `strategy=rand` to create locally homogeneous DL graph. Furthermore, the table below show nodes in the form `m/n`. When running the
+experiemnts, the `n_parties` argument is set to the `n` value. While the `m` value is automatically set. This happens when setting the `topology`=pcc.
+
 ### Non-IID Setting
 
-| Experiment    |   Dataset      |     Non-IID                   |    Model     |   Nodes        | Delta Acc.  |
-| --------------|--------------- | ----------------------------- | ------------ | -------------- | ------------|
-| A             |                | #label2                       |              |   18/20        | +6.28%      |
-| B             | `CIFAR-10`     | labeldir `beta`=0.5           | ResNet-18    |   15/20        | -1.98%      |
-| C             |                | feat-noise `noise`=0.2        |              |   20/24        | +1.13%      |
-| D             |                | mixed `beta`=0.5,`noise`=0.3  |              |   20/24        | +1.59%      |
-| --------------|--------------- | ----------------------------- | ------------ | -------------- | ------------|
-| E             |                | #label2                       |              |   22/24        | +6.28%      |
-| F             | `MNIST`        | labeldir `beta`=0.5           | `simple-cnn` |   22/24        | -1.98%      |
-| G             |                | feat-noise `noise`=0.2        |              |   24/24        | +1.13%      |
-| H             |                | mixed `beta`=0.5,`noise`=0.3  |              |   24/24        | +1.59%      |
-| --------------|--------------- | ----------------------------- | ------------ | -------------- | ------------|
-| I             | `FEMNIST       | feat-noise `noise`=0.2        | `simple-ffnn`|   122/1200     | +1.13%      |
-| J             |                | mixed `beta`=0.5,`noise`=0.3  |              |   122/1200     | +1.59%      |
-| --------------|--------------- | ----------------------------- | ------------ | -------------- | ------------|
-| K             | `CIFAR-100`    | feat-noise `noise`=0.2        | ResNet-18    |   22/24        | +1.13%      |
-| L             |                | mixed `beta`=0.5,`noise`=0.3  |              |   22/24        | +1.59%      |
-| --------------|--------------- | ----------------------------- | ------------ | -------------- | ------------|
+| Experiment    |   Dataset      |  Partition |     Non-IID                   |    Model     |   Nodes        | Delta Acc.  |
+| --------------|--------------- | ---------- |------------------------------ | ------------ | -------------- | ------------|
+| A             | `CIFAR-10`     | `cut`= 0   | #label2                       | `ResNet-18`  |   18/20        | +6.28%      |
+| B             |  >>            |  >>        | labeldir `beta`=0.5           |  >>          |   15/20        | -1.98%      |
+| C             |  >>            |  >>        | feat-noise `noise`=0.2        |  >>          |   20/24        | +1.13%      |
+| D             |  >>            |  >>        | mixed `beta`=0.5,`noise`=0.3  |  >>          |   20/24        | +1.59%      |
+| E             | `MNIST`        |  >>        | #label2                       | `simple-cnn` |   22/24        | +25.9%      |
+| F             |  >>            | `cut`= 2   | labeldir `beta`=0.5           |  >>          |   22/24        | +29.6%      |
+| G             |  >>            | `cut`= 3   | feat-noise `noise`=0.2        |  >>          |   24/24        | +25.8%      |
+| H             |  >>            | `cut`= 4   | mixed `beta`=0.5,`noise`=0.3  |  >>          |   24/24        | +22.6%      |
+| I             | `FEMNIST`      | `cut`= 0   | feat-noise `noise`=0.2        | `simple-ffnn`|   122/1200     | +12.4%      |
+| J             |  >>            | >>         | mixed `beta`=0.5,`noise`=0.3  |  >>          |   122/1200     | +16.0%      |
+| K             | `CIFAR-100`    | >>         | feat-noise `noise`=0.2        | `ResNet-18`  |   22/24        | +1.31%      |
+| L             |  >>            | >>         | mixed `beta`=0.5,`noise`=0.3  |  >>          |   22/24        | +2.86%      |
+
 
 
 
