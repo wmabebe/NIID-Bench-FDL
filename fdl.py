@@ -578,26 +578,28 @@ if __name__ == '__main__':
                 G0 = BFTM_(adj_list,list(kmeans.labels_))
         elif TOPOLOGY == "clique":
             if STRATEGY == "rand":
-                G0 = m_cliques(adj_list,rand_labels)
+                G0 = m_cliques(adj_list,rand_labels,SIM_MATRIX)
             else:
-                G0 = m_cliques(adj_list,list(kmeans.labels_))
+                G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX)
         elif TOPOLOGY == "pcc": #pcc (per cluster clique) topology creates one cluster per clique
             if STRATEGY == "rand":
-                G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_rand",CUT)
+                G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX,"pcc_rand",CUT)
+            elif STRATEGY == "greedy":
+                G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX,"pcc_greedy",CUT)
             else:
-                G0 = m_cliques(adj_list,list(kmeans.labels_),"pcc_optim",CUT)
+                G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX,"pcc_optim",CUT)
         elif TOPOLOGY == "sample":
             if STRATEGY == "rand":
-                G0 = m_cliques(adj_list,list(kmeans.labels_),"sample_rand")
+                G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX,"sample_rand")
             else:
-                G0 = m_cliques(adj_list,list(kmeans.labels_),"sample_optim")
+                G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX,"sample_optim")
             print("Sampling done. G0.nodes:",G0.number_of_nodes())
             print("G0 labels: ",[kmeans.labels_[n.id] for n in list(G0.nodes)])
         else:
             if STRATEGY == "rand":
-                G0 = m_cliques(adj_list,rand_labels,"ring")
+                G0 = m_cliques(adj_list,rand_labels,"ring",SIM_MATRIX)
             else:
-                G0 = m_cliques(adj_list,list(kmeans.labels_),"ring")
+                G0 = m_cliques(adj_list,list(kmeans.labels_),"ring",SIM_MATRIX)
 
         nx.draw(G0,node_color=[kmeans.labels_[n.id]/len(kmeans.labels_) for n in list(G0.nodes)])
         plt.savefig(args.logdir + "graph.png")

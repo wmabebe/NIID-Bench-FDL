@@ -1047,7 +1047,33 @@ def is_empty(clusters):
             return False
     return True
 
-def pcc_clique(clusters,strategy, labels, cut=0):
+def greedy_cliques(cliques,clusters,matrix):
+    if len(clusters) == 0:
+        return cliques
+    cid = random.choice(range(len(clusters)))
+    cluster0 = clusters.pop(cid)
+    pid = random.choice(range(len(cluster0)))
+    p0 = cluster0.pop(pid)
+    clique = [p0]
+    
+    for cid,cluster in enumerate(clusters):
+        dist = float('-Inf')
+        idx = 0
+        for i,p in enumerate(cluster):
+            d = sum([matrix[p.id][c.id] for c in clique])
+            if d > dist:
+                dist = d
+                idx = i
+        item = cluster.pop(idx)
+        clique.append(item)
+        if len(cluster) <= 0:
+            clusters.pop(cid)
+    if len(cluster0) > 0:
+        clusters.append(cluster0)
+    cliques.append(clique)
+    return greedy_cliques(cliques,clusters,matrix)
+
+def pcc_clique(clusters,strategy, labels, cut=0, matrix=None):
     G = nx.Graph()
     cliques = []
     size = len(clusters)
@@ -1066,6 +1092,9 @@ def pcc_clique(clusters,strategy, labels, cut=0):
                     del cluster[cluster.index(element)]
             if clique:
                 cliques.append(clique)
+    
+    elif strategy == "greedy":
+        cliques = greedy_cliques([],list(clusters.values()),matrix)[:len(clusters)]
     
     for clique in cliques:
         if len(clique) == 1:
@@ -1153,7 +1182,7 @@ def cliques_on_ring(cliques,labels,G, cut=0):
         n2 = random.choice(candidates)
         G.add_edge(n1,n2)
 
-def m_cliques(adj_list,labels,topology="clique",cut=0):
+def m_cliques(adj_list,labels,matrix,topology="clique",cut=0):
     num_clusters = list(np.unique(labels))
     clusters = {i:[] for i in num_clusters}
     hood = {n.id:[i for i in num_clusters if i != labels[n.id]] for n in adj_list}
@@ -1174,6 +1203,9 @@ def m_cliques(adj_list,labels,topology="clique",cut=0):
     elif topology == "pcc_optim":
         G_cliques = pcc_clique(clusters,"optim",labels,cut)
         print("Optim sampled clique size:", G_cliques.number_of_nodes())
+    elif topology == "pcc_greedy":
+        G_cliques = pcc_clique(clusters,"greedy",labels,cut,matrix)
+        print("Greedy sampled clique size:", G_cliques.number_of_nodes())
     else:
         G_cliques = nx.Graph()
         cliques = []
