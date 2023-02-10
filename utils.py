@@ -302,11 +302,37 @@ def partition_data(dataset, datadir, logdir, partition, n_parties, beta=0.4):
 
 
     n_train = y_train.shape[0]
+    
+    if partition == "manual":
+        label_idxs = {i:[] for i in np.unique(y_train)}
+        label_node_map = {i:[] for i in label_idxs.keys()} 
+        label_node_map[0] = [0,5,10,15,20]
+        label_node_map[1] = [0,5,10,15,20]
+        label_node_map[2] = [1,6,11,16,21]
+        label_node_map[3] = [1,6,11,16,21]
+        label_node_map[4] = [2,7,12,17,22]
+        label_node_map[5] = [2,7,12,17,22]
+        label_node_map[6] = [3,8,13,18,23]
+        label_node_map[7] = [3,8,13,18,23]
+        label_node_map[8] = [4,9,14,19]
+        label_node_map[9] = [4,9,14,19]
+
+        
+        for i,label in enumerate(y_train):
+            label_idxs[label].append(i)
+        
+        net_dataidx_map = {i:[] for i in range(n_parties)}
+        for label, idxs in label_idxs.items():
+            batch_idxs = np.array_split(idxs, len(label_node_map[label]))
+            for i, net_id in enumerate(label_node_map[label]):
+                net_dataidx_map[net_id] += list(batch_idxs[i])
+        
 
     if partition == "homo":
         idxs = np.random.permutation(n_train)
         batch_idxs = np.array_split(idxs, n_parties)
         net_dataidx_map = {i: batch_idxs[i] for i in range(n_parties)}
+       
 
 
     elif partition == "noniid-labeldir":
@@ -1181,6 +1207,27 @@ def cliques_on_ring(cliques,labels,G, cut=0):
         candidates = candidates if len(candidates) > 0 else cliques[0]
         n2 = random.choice(candidates)
         G.add_edge(n1,n2)
+
+def manual_cliques(adj_list,cliques):
+    G = nx.Graph()
+    for clique in cliques:
+        for n1 in clique:
+            for n2 in clique:
+                if n1 != n2:
+                    G.add_edge(adj_list[n1],adj_list[n2])
+    
+    n1 = cliques[0][0]
+    for idx,clique in enumerate(cliques):
+        if idx > 0:
+            n2 = clique[2]
+            G.add_edge(adj_list[n1],adj_list[n2])
+            n1 = clique[0]
+        
+    #Attach head and tail cliques
+    n1 = cliques[0][3]
+    n2 = cliques[len(cliques) - 1][1]
+    G.add_edge(adj_list[n1],adj_list[n2])
+    return G
 
 def m_cliques(adj_list,labels,matrix,topology="clique",cut=0):
     num_clusters = list(np.unique(labels))

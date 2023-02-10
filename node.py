@@ -7,3 +7,6 @@ class Node:
         self.max_peers = max_peers
         self.candidates = []
         self.encountered = []
+    
+    def __str__(self) -> str:
+        return str(self.id)
