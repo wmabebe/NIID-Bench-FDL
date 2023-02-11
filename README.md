@@ -1,4 +1,5 @@
 # NIID-Bench-FDL
+<a href="https://zenodo.org/badge/latestdoi/499340677"><img src="https://zenodo.org/badge/499340677.svg" alt="DOI"></a>
 This repository clonned and transformed the <a href="https://github.com/Xtra-Computing/NIID-Bench">NIID-Bench </a> repository.
 Here is the original paper on Non-IID FL [Federated Learning on Non-IID Data Silos: An Experimental Study](https://arxiv.org/pdf/2102.02079.pdf).
 
