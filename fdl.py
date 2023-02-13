@@ -606,7 +606,12 @@ if __name__ == '__main__':
     
     elif TOPOLOGY == "manual":
         print("Manual topology!")
-        topo = [[0,1,2,3,4],[5,6,7,8,9],[10,11,12,13,14],[15,16,17,18,19],[20,21,22,23]]
+        if STRATEGY == "optim":
+            topo = [[0,1,2,3,4],[5,6,7,8,9],[10,11,12,13,14],[15,16,17,18,19],[20,21,22,23]]
+        elif STRATEGY == "rand":
+            topo = [i for i in range(24)]
+            random.shuffle(topo)
+            topo = np.array_split(topo,5)
         G0 = manual_cliques(adj_list,topo)
         nx.draw(G0, with_labels = True)
         plt.savefig(args.logdir + "graph.png")
