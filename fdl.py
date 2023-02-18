@@ -10,7 +10,7 @@ import torch.utils.data as data
 import argparse
 import logging
 import os
-import copy
+
 from math import *
 import random
 import networkx as nx
@@ -70,298 +70,6 @@ def get_args():
     args = parser.parse_args()
     return args
 
-def init_nets(net_configs, dropout_p, n_parties, args):
-
-    nets = {net_i: None for net_i in range(n_parties)}
-
-    for net_i in range(n_parties):
-        if args.dataset == "generated":
-            net = PerceptronModel()
-        elif args.model == "mlp":
-            if args.dataset == 'covtype':
-                input_size = 54
-                output_size = 2
-                hidden_sizes = [32,16,8]
-            elif args.dataset == 'a9a':
-                input_size = 123
-                output_size = 2
-                hidden_sizes = [32,16,8]
-            elif args.dataset == 'rcv1':
-                input_size = 47236
-                output_size = 2
-                hidden_sizes = [32,16,8]
-            elif args.dataset == 'SUSY':
-                input_size = 18
-                output_size = 2
-                hidden_sizes = [16,8]
-            net = FcNet(input_size, hidden_sizes, output_size, dropout_p)
-        elif args.model == "vgg":
-            net = vgg11()
-        elif args.model == "simple-ffnn":
-            #Assuming we are using MNIST dataset: input size = 784, num_classes = 10
-            input_size, hidden_size, num_classes = 784, 10, 10
-            net = NeuralNet(input_size, hidden_size, num_classes)
-        elif args.model == "simple-cnn":
-            if args.dataset in ("cifar10", "cinic10", "svhn"):
-                net = SimpleCNN(input_dim=(16 * 5 * 5), hidden_dims=[120, 84], output_dim=10)
-            elif args.dataset in ("mnist", 'femnist', 'fmnist'):
-                net = SimpleCNNMNIST(input_dim=(16 * 4 * 4), hidden_dims=[120, 84], output_dim=10)
-            elif args.dataset == 'celeba':
-                net = SimpleCNN(input_dim=(16 * 5 * 5), hidden_dims=[120, 84], output_dim=2)
-        elif args.model == "vgg-9":
-            if args.dataset in ("mnist", 'femnist'):
-                net = ModerateCNNMNIST()
-            elif args.dataset in ("cifar10", "cinic10", "svhn"):
-                # print("in moderate cnn")
-                net = ModerateCNN()
-            elif args.dataset == 'celeba':
-                net = ModerateCNN(output_dim=2)
-        elif args.model == "resnet":
-            net = ResNet50_cifar10()
-        elif args.model == "res18":
-            net = torchvision.models.resnet18(pretrained=args.pretrained == 1)
-            #Finetune Final layers to adjust for tiny imagenet input
-            if args.dataset == "tinyimagenet":                
-                net.avgpool = nn.AdaptiveAvgPool2d(1)
-                num_ftrs = net.fc.in_features
-                net.fc = nn.Linear(num_ftrs, 200)
-            elif args.dataset == "cifar100":
-                net.avgpool = nn.AdaptiveAvgPool2d(1)
-                num_ftrs = net.fc.in_features
-                net.fc = nn.Linear(num_ftrs, 100)
-            elif args.dataset in ["cifar10"]:
-                net.avgpool = nn.AdaptiveAvgPool2d(1)
-                num_ftrs = net.fc.in_features
-                net.fc = nn.Linear(num_ftrs, 10)
-        elif args.model == 'res20':
-            net = resnet20()
-        elif args.model == "vgg16":
-            net = vgg16()
-        else:
-            print("not supported yet")
-            exit(1)
-        nets[net_i] = net
-
-    model_meta_data = []
-    layer_type = []
-    for (k, v) in nets[0].state_dict().items():
-        model_meta_data.append(v.shape)
-        layer_type.append(k)
-
-    return nets, model_meta_data, layer_type
-
-
-def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_optimizer, sched, device="cpu",stash=False,accuracy=True):
-    logger.info('Training network %s' % str(net_id))
-    train_acc, test_acc = None, None
-    if accuracy:
-        train_acc = compute_accuracy(net, train_dataloader, device=device)
-        test_acc, conf_matrix = compute_accuracy(net, test_dataloader, get_confusion_matrix=True, device=device)
-        logger.info('>> Pre-Training Training accuracy: {}'.format(train_acc))
-        logger.info('>> Pre-Training Test accuracy: {}'.format(test_acc))
-
-    if args_optimizer == 'adam':
-        optimizer = optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=lr, weight_decay=args.reg)
-    elif args_optimizer == 'amsgrad':
-        optimizer = optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=lr, weight_decay=args.reg,
-                               amsgrad=True)
-    elif args_optimizer == 'sgd':
-        optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr=lr)#, momentum=0.9, weight_decay=5e-4, nesterov=True)
-    scheduler = optim.lr_scheduler.StepLR(optimizer,step_size=5,gamma=0.1)
-    #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5)
-    criterion = nn.CrossEntropyLoss().to(device)
-
-    cnt = 0
-    if type(train_dataloader) == type([1]):
-        pass
-    else:
-        train_dataloader = [train_dataloader]
-
-    #writer = SummaryWriter()
-
-    for epoch in range(epochs):
-        epoch_loss_collector = []
-        last_td = len(train_dataloader) - 1
-        # print ("Epoch", epoch)
-        for idx,tmp in enumerate(train_dataloader):
-            last_batch = len(tmp) - 1
-            for batch_idx, (x, target) in enumerate(tmp):
-                x, target = x.to(device), target.to(device)
-
-                optimizer.zero_grad()
-                x.requires_grad = True
-                target.requires_grad = False
-                target = target.long()
-
-                out = net(x)
-                loss = criterion(out, target)
-
-                loss.backward()
-                # print ("\t batch " + str(batch_idx) +" trained")
-                #Collect grads here if in pretraining (stash) mode!
-                if stash and epoch == epochs - 1 and idx == last_td and batch_idx == last_batch:
-                    net.stash_grads()
-                
-                optimizer.step()
-
-                cnt += 1
-                epoch_loss_collector.append(loss.item())
-        
-        if sched:
-            scheduler.step()
-
-        epoch_loss = sum(epoch_loss_collector) / len(epoch_loss_collector)
-        logger.info('Epoch: %d Loss: %f' % (epoch, epoch_loss))
-
-        #train_acc = compute_accuracy(net, train_dataloader, device=device)
-        #test_acc, conf_matrix = compute_accuracy(net, test_dataloader, get_confusion_matrix=True, device=device)
-
-        #writer.add_scalar('Accuracy/train', train_acc, epoch)
-        #writer.add_scalar('Accuracy/test', test_acc, epoch)
-
-        # if epoch % 10 == 0:
-        #     logger.info('Epoch: %d Loss: %f' % (epoch, epoch_loss))
-        #     train_acc = compute_accuracy(net, train_dataloader, device=device)
-        #     test_acc, conf_matrix = compute_accuracy(net, test_dataloader, get_confusion_matrix=True, device=device)
-        #
-        #     logger.info('>> Training accuracy: %f' % train_acc)
-        #     logger.info('>> Test accuracy: %f' % test_acc)
-
-    if accuracy:
-        train_acc = compute_accuracy(net, train_dataloader, device=device)
-        test_acc, conf_matrix = compute_accuracy(net, test_dataloader, get_confusion_matrix=True, device=device)
-        logger.info('>> Training accuracy: %f' % train_acc)
-        logger.info('>> Test accuracy: %f' % test_acc)
-
-    logger.info(' ** Training complete **')
-    return train_acc, test_acc
-
-
-def view_image(train_dataloader):
-    for (x, target) in train_dataloader:
-        np.save("img.npy", x)
-        print(x.shape)
-        exit(0)
-
-def local_pre_training(nets, selected, args, net_dataidx_map, pre_epochs, test_dl = None, device="cpu"):
-    for net_id, net in nets.items():
-        if net_id not in selected:
-            continue
-        dataidxs = net_dataidx_map[net_id]
-
-        # move the model to cuda device:
-        net.to(device)
-
-        noise_level = args.noise
-        if net_id == args.n_parties - 1:
-            noise_level = 0
-
-        if args.noise_type == 'space':
-            train_dl_local, test_dl_local, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32, dataidxs, noise_level, net_id, args.n_parties-1)
-        else:
-            noise_level = args.noise / (args.n_parties - 1) * net_id
-            train_dl_local, test_dl_local, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32, dataidxs, noise_level)
-        train_dl_global, test_dl_global, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32)
-        n_epoch = args.epochs
-
-        sched = args.model in ["res20", "vgg"]
-
-        #Pre train for 10 epochs
-        _, _ = train_net(net_id, net, train_dl_local, test_dl, pre_epochs, args.lr, args.optimizer, sched, device=device, stash=args.similarity == "grad",accuracy=args.local_acc)
-
-def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
-    avg_acc, avg_train_acc = None, None
-    if args.local_acc:
-        avg_acc = 0.0
-        avg_train_acc = 0.0
-    for net_id, net in nets.items():
-        if net_id not in selected:
-            continue
-        dataidxs = net_dataidx_map[net_id]
-
-        logger.info("Training network %s. n_training: %d" % (str(net_id), len(dataidxs)))
-        # move the model to cuda device:
-        net.to(device)
-
-        noise_level = args.noise
-        if net_id == args.n_parties - 1:
-            noise_level = 0
-
-        if args.noise_type == 'space':
-            train_dl_local, test_dl_local, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32, dataidxs, noise_level, net_id, args.n_parties-1)
-        else:
-            noise_level = args.noise / (args.n_parties - 1) * net_id
-            train_dl_local, test_dl_local, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32, dataidxs, noise_level)
-        train_dl_global, test_dl_global, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32)
-        n_epoch = args.epochs
-
-        sched = args.model in ["res20", "vgg","res18"]
-
-        trainacc, testacc = train_net(net_id, net, train_dl_local, test_dl, n_epoch, args.lr, args.optimizer, sched, device=device, accuracy=args.local_acc)
-        if args.local_acc:
-            logger.info("net %d final test acc %f" % (net_id, testacc))
-            avg_acc += testacc
-            avg_train_acc += trainacc
-        # saving the trained models here
-        # save_model(net, net_id, args)
-        # else:
-        #     load_model(net, net_id, device=device)
-    
-    if args.local_acc:
-        avg_acc /= len(selected)
-        avg_train_acc /= len(selected)
-        if args.alg == 'local_training':
-            logger.info("avg train acc %f \t avg test acc %f" % (avg_train_acc,avg_acc))
-
-    nets_list = list(nets.values())
-    return nets_list, avg_train_acc, avg_acc
-
-def get_partition_dict(dataset, partition, n_parties, init_seed=0, datadir='./data', logdir='./logs', beta=0.5):
-    seed = init_seed
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    random.seed(seed)
-    X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(
-        dataset, datadir, logdir, partition, n_parties, beta=beta)
-
-    return net_dataidx_map
-
-def average_gradients(grads):
-    avg_grad = copy.deepcopy(grads[0])
-    for idx,grad in enumerate(grads):
-        if idx >= 1:
-            for name,layer in grad.items():
-                avg_grad[name] += layer
-    for name,layer in avg_grad.items():
-        avg_grad[name] /= len(grads)
-    return avg_grad
-
-def average_weights(w,weights=None):
-    """
-    Returns the average of the weights.
-    """
-    w_avg = copy.deepcopy(w[0])
-    for key in w_avg.keys():
-        for i in range(1, len(w)):
-            w_avg[key] += w[i][key]
-        w_avg[key] = torch.div(w_avg[key], len(w))
-    return w_avg
-
-#Ripple updates with 1-hop neighbors
-def ripple_updates(G):
-    #Compute vicinity weights for all nodes
-    weight_updates = {n:None for n in list(G.nodes)}
-    for node in list(G.nodes):
-        vicinity_weights = [copy.deepcopy(node.model.state_dict())]
-        for neighbor,_ in G.adj[node].items():
-            vicinity_weights.append(copy.deepcopy(neighbor.model.state_dict()))
-        vicinity_weights = average_weights(vicinity_weights)
-        weight_updates[node] = vicinity_weights
-    
-    #Update vicinity weights
-    for node,weight in weight_updates.items():
-        node.model.load_state_dict(weight)
-
 if __name__ == '__main__':
     # torch.set_printoptions(profile="full")
     args = get_args()
@@ -380,7 +88,7 @@ if __name__ == '__main__':
     DATASET = args.dataset
     NOISE = args.noise
 
-    #Create random template graph
+    #Create random template graph with max degree size
     GT = nx.random_regular_graph(d=MAX_PEERS, n=NODES)
 
 
@@ -399,8 +107,7 @@ if __name__ == '__main__':
         json.dump(str(args), f)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info('Device: %s' % str(device))
-    # logging.basicConfig(filename='test.log', level=logger.info, filemode='w')
-    # logging.info("test")
+
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
 
@@ -417,35 +124,40 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     logger.info(device)
 
+    #Setting random seeds for experimental reproducibility
     seed = args.init_seed
     logger.info("#" * 100)
     np.random.seed(seed)
     torch.manual_seed(seed)
     random.seed(seed)
+
+    #Partition data based on user input
     logger.info("Partitioning data")
     print("Datadir:", args.datadir)
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(
         args.dataset, args.datadir, args.logdir, args.partition, args.n_parties, beta=args.beta)
 
+    #Get the number of labels
     n_classes = len(np.unique(y_train))
     args.datadir = args.datadir + "tiny-imagenet-200/" if args.dataset == "tinyimagenet" else args.datadir
-    print("#classes:",n_classes)
-    print("#X_train:",len(X_train))
-    print("#X_test:",len(X_test))
-    print("#netidxmap",len(net_dataidx_map))
-    for i,net in enumerate(net_dataidx_map):
-        print("\t#netidxmap["+str(i)+"]",len(net_dataidx_map[i]))
+    
+    # print("#classes:",n_classes)
+    # print("#X_train:",len(X_train))
+    # print("#X_test:",len(X_test))
+    # print("#netidxmap",len(net_dataidx_map))
+    # for i,net in enumerate(net_dataidx_map):
+    #     print("\t#netidxmap["+str(i)+"]",len(net_dataidx_map[i]))
 
+    #Setup train and test dataloaders
     train_dl_global, test_dl_global, train_ds_global, test_ds_global = get_dataloader(args.dataset,
                                                                                         args.datadir,
                                                                                         args.batch_size,
                                                                                         32)
 
-    print("len train_ds_global:", len(train_ds_global) if train_ds_global else train_ds_global)
-    print("len test_ds_global:", len(test_ds_global) if test_ds_global else test_ds_global)
+    # print("len train_ds_global:", len(train_ds_global) if train_ds_global else train_ds_global)
+    # print("len test_ds_global:", len(test_ds_global) if test_ds_global else test_ds_global)
 
-    #Split the test into val and test
-
+    #Setup global dataset dataloader
     if DATASET in ["cifar10","cifar100"]:
         val_dl_global = get_val_dataloader("tinyimagenet", "./data/tiny-imagenet-200/", 1000, 32)
     elif DATASET in ["mnist","femnist"]:
@@ -453,12 +165,14 @@ if __name__ == '__main__':
     elif DATASET in ["tinyimagenet"]:
          val_dl_global = get_val_dataloader("cifar10", "./data/", 1000, 32)
 
-    print("len train_dl_global:",len(train_dl_global))
-    print("len val_dl_global:",len(val_dl_global))
-    print("len test_dl_global:",len(test_dl_global))
+    # print("len train_dl_global:",len(train_dl_global))
+    # print("len val_dl_global:",len(val_dl_global))
+    # print("len test_dl_global:",len(test_dl_global))
 
     # test_dl = data.DataLoader(dataset=test_ds_global, batch_size=32, shuffle=False)
 
+
+    #Add Gaussian noise to data if required
     train_all_in_list = []
     test_all_in_list = []
     if args.noise > 0:
@@ -482,14 +196,14 @@ if __name__ == '__main__':
         test_dl_global = data.DataLoader(dataset=test_all_in_ds, batch_size=32, shuffle=False)
 
 
+    #Initialize the client models
     logger.info("Initializing nets")
     nets, local_model_meta_data, layer_type = init_nets(args.net_config, args.dropout_p, args.n_parties, args)
     # global_models, global_model_meta_data, global_layer_type = init_nets(args.net_config, 0, 1, args)
     # global_model = global_models[0]
+    # print(nets[0])
 
-    print(nets[0])
-
-    #Initialize the p2p graph
+    #Initialize peer adjacency list
     adj_list = [Node(idx,net,net_dataidx_map[idx],MAX_PEERS) for idx,net in nets.items()]
 
     #Initialize node caches
@@ -503,7 +217,7 @@ if __name__ == '__main__':
     for u,v in GT.edges:
         G0.add_edge(adj_list[u],adj_list[v])
     
-    print("TOPOLOGY:",TOPOLOGY)
+    # print("TOPOLOGY:",TOPOLOGY)
     
     if TOPOLOGY not in ["complete","manual"]:
         #Pretrain selected nodes to compute local gradients for 10 epochs
@@ -567,10 +281,10 @@ if __name__ == '__main__':
         #plt.show()
 
         #Generate random labels for random strategy
+        #This simply shuffles the clustered nodes
         rand_labels = [i for i in list(kmeans.labels_)]
         random.shuffle(rand_labels)
 
-        #Construct tree
         if TOPOLOGY == "tree":
             if STRATEGY == "rand":
                 G0 = BFTM_(adj_list,rand_labels)
@@ -581,11 +295,20 @@ if __name__ == '__main__':
                 G0 = m_cliques(adj_list,rand_labels,SIM_MATRIX)
             else:
                 G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX)
-        elif TOPOLOGY == "pcc": #pcc (per cluster clique) topology creates one cluster per clique
+        # pcc (per cluster clique) topology creates one clique per cluster
+        # The cliques will be arranged in a ring topology
+        # This topology is the most suitable for comparisons
+        elif TOPOLOGY == "pcc":
+            #The rand option creates a ring of locally homogenous cliques
+            #Here, local cliques are created via uniform sampling from among kmeans clusters 
             if STRATEGY == "rand":
                 G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX,"pcc_rand",CUT)
+            #The greedy option creates a ring of locally heterogeneous cliques
+            #Here, local cliques are created via greedy construction from among kmeans clusters
             elif STRATEGY == "greedy":
                 G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX,"pcc_greedy",CUT)
+            #The optim option creates locally heterogenous cliques
+            #Here, local cliques are created via uniform sampling from among kmeans clusters
             else:
                 G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX,"pcc_optim",CUT)
         elif TOPOLOGY == "sample":
@@ -604,11 +327,15 @@ if __name__ == '__main__':
         nx.draw(G0,node_color=[kmeans.labels_[n.id]/len(kmeans.labels_) for n in list(G0.nodes)],with_labels = True)
         plt.savefig(args.logdir + "graph.png")
     
+    #We have added a manual topology option to go with a manual partition
+    #At the moment, this option is not yet programmable as it only considers 24 nodes
     elif TOPOLOGY == "manual":
         print("Manual topology!")
+        # The optim strategy creates locally heterogenous set of cliques
         if STRATEGY == "optim":
             topo = [[0,1,2,3,4],[5,6,7,8,9],[10,11,12,13,14],[15,16,17,18,19],[20,21,22,23]]
             print("Optim topology!")
+        #The rand strategy creates cliques madeup of random nodes
         elif STRATEGY == "rand":
             topo = [i for i in range(24)]
             random.shuffle(topo)
@@ -627,45 +354,21 @@ if __name__ == '__main__':
     #     for net_id, net in nets.items():
     #         net.load_state_dict(global_para)
 
+
+    #Training commences once topological pre-processing is over
+    #This is main DL training loop where nodes are trained in each communication round
     for round in range(args.comm_round):
         logger.info("in comm round:" + str(round))
 
-        # arr = np.arange(args.n_parties)
-        # np.random.shuffle(arr)
-        # selected = arr[:int(args.n_parties * args.sample)]
-
-        #global_para = global_model.state_dict()
-        # if round == 0:
-        #     if args.is_same_initial:
-        #         for idx in selected:
-        #             nets[idx].load_state_dict(global_para)
-        # else:
-        #     for idx in selected:
-        #         nets[idx].load_state_dict(global_para)
+        #Select all nodes for local training
         subnets = {net_i:net for net_i,net in nets.items() if net in [n.model for n in list(G0.nodes)]}
         selected = [net_i for net_i,_ in subnets.items()]
         _, avg_local_train_acc, avg_local_test_acc = local_train_net(subnets, selected, args, net_dataidx_map, test_dl = test_dl_global, device=device)
-        # local_train_net(nets, args, net_dataidx_map, local_split=False, device=device)
-
-        # update global model
-        # total_data_points = sum([len(net_dataidx_map[r]) for r in selected])
-        # fed_avg_freqs = [len(net_dataidx_map[r]) / total_data_points for r in selected]
-
-        # for idx in range(len(selected)):
-        #     net_para = nets[selected[idx]].cpu().state_dict()
-        #     if idx == 0:
-        #         for key in net_para:
-        #             global_para[key] = net_para[key] * fed_avg_freqs[idx]
-        #     else:
-        #         for key in net_para:
-        #             global_para[key] += net_para[key] * fed_avg_freqs[idx]
-        # global_model.load_state_dict(global_para)
-
 
         logger.info('global n_training: %d' % len(train_dl_global))
         logger.info('global n_test: %d' % len(test_dl_global))
 
-        #Update p2p nodes
+        #Perform local aggregation by averaging neighborhood weights
         ripple_updates(G0)
 
         avg_global_train_acc, avg_global_test_acc = 0.0, 0.0

@@ -11,6 +11,8 @@ import random
 from sklearn.metrics import confusion_matrix
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
+import copy
+
 
 from model import *
 from datasets import MNIST_truncated, CIFAR10_truncated, SVHN_custom, FashionMNIST_truncated, CustomTensorDataset, CelebA_custom, FEMNIST, Generated, genData, CIFAR100_truncated, ImageFolder_custom
@@ -31,9 +33,19 @@ from sklearn.datasets import load_svmlight_file
 import random
 import networkx as nx
 
+
+from urllib.request import urlopen
+from io import BytesIO
+from zipfile import ZipFile
+
 logging.basicConfig()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+def download_and_unzip(url, extract_to='.'):
+    http_response = urlopen(url)
+    zipfile = ZipFile(BytesIO(http_response.read()))
+    zipfile.extractall(path=extract_to)
 
 def mkdirs(dirpath):
     try:
@@ -620,6 +632,8 @@ class AddGaussianNoise(object):
 def get_val_dataloader(dataset, datadir, datasize, val_bs):
     val_dl = None
     if dataset == 'tinyimagenet':
+        if not os.path.exists('./data/tiny-imagenet-200'):
+            download_and_unzip('http://cs231n.stanford.edu/tiny-imagenet-200.zip','./data/')
         random_ids = np.random.randint(100000, size=datasize)
         val_indices = random_ids
 
@@ -1331,3 +1345,298 @@ def BFTM_(adj_list,labels):
                         G_prime.add_edge(node,_2_hop)
     
     return G_prime
+
+
+def init_nets(net_configs, dropout_p, n_parties, args):
+
+    nets = {net_i: None for net_i in range(n_parties)}
+
+    for net_i in range(n_parties):
+        if args.dataset == "generated":
+            net = PerceptronModel()
+        elif args.model == "mlp":
+            if args.dataset == 'covtype':
+                input_size = 54
+                output_size = 2
+                hidden_sizes = [32,16,8]
+            elif args.dataset == 'a9a':
+                input_size = 123
+                output_size = 2
+                hidden_sizes = [32,16,8]
+            elif args.dataset == 'rcv1':
+                input_size = 47236
+                output_size = 2
+                hidden_sizes = [32,16,8]
+            elif args.dataset == 'SUSY':
+                input_size = 18
+                output_size = 2
+                hidden_sizes = [16,8]
+            net = FcNet(input_size, hidden_sizes, output_size, dropout_p)
+        elif args.model == "vgg":
+            net = vgg11()
+        elif args.model == "simple-ffnn":
+            #Assuming we are using MNIST dataset: input size = 784, num_classes = 10
+            input_size, hidden_size, num_classes = 784, 10, 10
+            net = NeuralNet(input_size, hidden_size, num_classes)
+        elif args.model == "simple-cnn":
+            if args.dataset in ("cifar10", "cinic10", "svhn"):
+                net = SimpleCNN(input_dim=(16 * 5 * 5), hidden_dims=[120, 84], output_dim=10)
+            elif args.dataset in ("mnist", 'femnist', 'fmnist'):
+                net = SimpleCNNMNIST(input_dim=(16 * 4 * 4), hidden_dims=[120, 84], output_dim=10)
+            elif args.dataset == 'celeba':
+                net = SimpleCNN(input_dim=(16 * 5 * 5), hidden_dims=[120, 84], output_dim=2)
+        elif args.model == "vgg-9":
+            if args.dataset in ("mnist", 'femnist'):
+                net = ModerateCNNMNIST()
+            elif args.dataset in ("cifar10", "cinic10", "svhn"):
+                # print("in moderate cnn")
+                net = ModerateCNN()
+            elif args.dataset == 'celeba':
+                net = ModerateCNN(output_dim=2)
+        elif args.model == "resnet":
+            net = ResNet50_cifar10()
+        elif args.model == "res18":
+            net = torchvision.models.resnet18(pretrained=args.pretrained == 1)
+            #Finetune Final layers to adjust for tiny imagenet input
+            if args.dataset == "tinyimagenet":                
+                net.avgpool = nn.AdaptiveAvgPool2d(1)
+                num_ftrs = net.fc.in_features
+                net.fc = nn.Linear(num_ftrs, 200)
+            elif args.dataset == "cifar100":
+                net.avgpool = nn.AdaptiveAvgPool2d(1)
+                num_ftrs = net.fc.in_features
+                net.fc = nn.Linear(num_ftrs, 100)
+            elif args.dataset in ["cifar10"]:
+                net.avgpool = nn.AdaptiveAvgPool2d(1)
+                num_ftrs = net.fc.in_features
+                net.fc = nn.Linear(num_ftrs, 10)
+        elif args.model == 'res20':
+            net = resnet20()
+        elif args.model == "vgg16":
+            net = vgg16()
+        else:
+            print("not supported yet")
+            exit(1)
+        nets[net_i] = net
+
+    model_meta_data = []
+    layer_type = []
+    for (k, v) in nets[0].state_dict().items():
+        model_meta_data.append(v.shape)
+        layer_type.append(k)
+
+    return nets, model_meta_data, layer_type
+
+
+def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_optimizer, sched, device="cpu",stash=False,accuracy=True):
+    logger.info('Training network %s' % str(net_id))
+    train_acc, test_acc = None, None
+    if accuracy:
+        train_acc = compute_accuracy(net, train_dataloader, device=device)
+        test_acc, conf_matrix = compute_accuracy(net, test_dataloader, get_confusion_matrix=True, device=device)
+        logger.info('>> Pre-Training Training accuracy: {}'.format(train_acc))
+        logger.info('>> Pre-Training Test accuracy: {}'.format(test_acc))
+
+    if args_optimizer == 'adam':
+        optimizer = optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=lr, weight_decay=args.reg)
+    elif args_optimizer == 'amsgrad':
+        optimizer = optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=lr, weight_decay=args.reg,
+                               amsgrad=True)
+    elif args_optimizer == 'sgd':
+        optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr=lr)#, momentum=0.9, weight_decay=5e-4, nesterov=True)
+    scheduler = optim.lr_scheduler.StepLR(optimizer,step_size=5,gamma=0.1)
+    #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5)
+    criterion = nn.CrossEntropyLoss().to(device)
+
+    cnt = 0
+    if type(train_dataloader) == type([1]):
+        pass
+    else:
+        train_dataloader = [train_dataloader]
+
+    #writer = SummaryWriter()
+
+    for epoch in range(epochs):
+        epoch_loss_collector = []
+        last_td = len(train_dataloader) - 1
+        # print ("Epoch", epoch)
+        for idx,tmp in enumerate(train_dataloader):
+            last_batch = len(tmp) - 1
+            for batch_idx, (x, target) in enumerate(tmp):
+                x, target = x.to(device), target.to(device)
+
+                optimizer.zero_grad()
+                x.requires_grad = True
+                target.requires_grad = False
+                target = target.long()
+
+                out = net(x)
+                loss = criterion(out, target)
+
+                loss.backward()
+                # print ("\t batch " + str(batch_idx) +" trained")
+                #Collect grads here if in pretraining (stash) mode!
+                if stash and epoch == epochs - 1 and idx == last_td and batch_idx == last_batch:
+                    net.stash_grads()
+                
+                optimizer.step()
+
+                cnt += 1
+                epoch_loss_collector.append(loss.item())
+        
+        if sched:
+            scheduler.step()
+
+        epoch_loss = sum(epoch_loss_collector) / len(epoch_loss_collector)
+        logger.info('Epoch: %d Loss: %f' % (epoch, epoch_loss))
+
+        #train_acc = compute_accuracy(net, train_dataloader, device=device)
+        #test_acc, conf_matrix = compute_accuracy(net, test_dataloader, get_confusion_matrix=True, device=device)
+
+        #writer.add_scalar('Accuracy/train', train_acc, epoch)
+        #writer.add_scalar('Accuracy/test', test_acc, epoch)
+
+        # if epoch % 10 == 0:
+        #     logger.info('Epoch: %d Loss: %f' % (epoch, epoch_loss))
+        #     train_acc = compute_accuracy(net, train_dataloader, device=device)
+        #     test_acc, conf_matrix = compute_accuracy(net, test_dataloader, get_confusion_matrix=True, device=device)
+        #
+        #     logger.info('>> Training accuracy: %f' % train_acc)
+        #     logger.info('>> Test accuracy: %f' % test_acc)
+
+    if accuracy:
+        train_acc = compute_accuracy(net, train_dataloader, device=device)
+        test_acc, conf_matrix = compute_accuracy(net, test_dataloader, get_confusion_matrix=True, device=device)
+        logger.info('>> Training accuracy: %f' % train_acc)
+        logger.info('>> Test accuracy: %f' % test_acc)
+
+    logger.info(' ** Training complete **')
+    return train_acc, test_acc
+
+
+def view_image(train_dataloader):
+    for (x, target) in train_dataloader:
+        np.save("img.npy", x)
+        print(x.shape)
+        exit(0)
+
+def local_pre_training(nets, selected, args, net_dataidx_map, pre_epochs, test_dl = None, device="cpu"):
+    for net_id, net in nets.items():
+        if net_id not in selected:
+            continue
+        dataidxs = net_dataidx_map[net_id]
+
+        # move the model to cuda device:
+        net.to(device)
+
+        noise_level = args.noise
+        if net_id == args.n_parties - 1:
+            noise_level = 0
+
+        if args.noise_type == 'space':
+            train_dl_local, test_dl_local, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32, dataidxs, noise_level, net_id, args.n_parties-1)
+        else:
+            noise_level = args.noise / (args.n_parties - 1) * net_id
+            train_dl_local, test_dl_local, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32, dataidxs, noise_level)
+        train_dl_global, test_dl_global, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32)
+        n_epoch = args.epochs
+
+        sched = args.model in ["res20", "vgg"]
+
+        #Pre train for 10 epochs
+        _, _ = train_net(net_id, net, train_dl_local, test_dl, pre_epochs, args.lr, args.optimizer, sched, device=device, stash=args.similarity == "grad",accuracy=args.local_acc)
+
+def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
+    avg_acc, avg_train_acc = None, None
+    if args.local_acc:
+        avg_acc = 0.0
+        avg_train_acc = 0.0
+    for net_id, net in nets.items():
+        if net_id not in selected:
+            continue
+        dataidxs = net_dataidx_map[net_id]
+
+        logger.info("Training network %s. n_training: %d" % (str(net_id), len(dataidxs)))
+        # move the model to cuda device:
+        net.to(device)
+
+        noise_level = args.noise
+        if net_id == args.n_parties - 1:
+            noise_level = 0
+
+        if args.noise_type == 'space':
+            train_dl_local, test_dl_local, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32, dataidxs, noise_level, net_id, args.n_parties-1)
+        else:
+            noise_level = args.noise / (args.n_parties - 1) * net_id
+            train_dl_local, test_dl_local, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32, dataidxs, noise_level)
+        train_dl_global, test_dl_global, _, _ = get_dataloader(args.dataset, args.datadir, args.batch_size, 32)
+        n_epoch = args.epochs
+
+        sched = args.model in ["res20", "vgg","res18"]
+
+        trainacc, testacc = train_net(net_id, net, train_dl_local, test_dl, n_epoch, args.lr, args.optimizer, sched, device=device, accuracy=args.local_acc)
+        if args.local_acc:
+            logger.info("net %d final test acc %f" % (net_id, testacc))
+            avg_acc += testacc
+            avg_train_acc += trainacc
+        # saving the trained models here
+        # save_model(net, net_id, args)
+        # else:
+        #     load_model(net, net_id, device=device)
+    
+    if args.local_acc:
+        avg_acc /= len(selected)
+        avg_train_acc /= len(selected)
+        if args.alg == 'local_training':
+            logger.info("avg train acc %f \t avg test acc %f" % (avg_train_acc,avg_acc))
+
+    nets_list = list(nets.values())
+    return nets_list, avg_train_acc, avg_acc
+
+#This method returns a dictionary with node_id keys and a list of data_id indexes
+def get_partition_dict(dataset, partition, n_parties, init_seed=0, datadir='./data', logdir='./logs', beta=0.5):
+    seed = init_seed
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    random.seed(seed)
+    X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(
+        dataset, datadir, logdir, partition, n_parties, beta=beta)
+
+    return net_dataidx_map
+
+def average_gradients(grads):
+    avg_grad = copy.deepcopy(grads[0])
+    for idx,grad in enumerate(grads):
+        if idx >= 1:
+            for name,layer in grad.items():
+                avg_grad[name] += layer
+    for name,layer in avg_grad.items():
+        avg_grad[name] /= len(grads)
+    return avg_grad
+
+#This method averages weights in w list
+def average_weights(w,weights=None):
+    """
+    Returns the average of the weights.
+    """
+    w_avg = copy.deepcopy(w[0])
+    for key in w_avg.keys():
+        for i in range(1, len(w)):
+            w_avg[key] += w[i][key]
+        w_avg[key] = torch.div(w_avg[key], len(w))
+    return w_avg
+
+#Ripple updates with 1-hop neighbors
+def ripple_updates(G):
+    #Compute vicinity weights for all nodes
+    weight_updates = {n:None for n in list(G.nodes)}
+    for node in list(G.nodes):
+        vicinity_weights = [copy.deepcopy(node.model.state_dict())]
+        for neighbor,_ in G.adj[node].items():
+            vicinity_weights.append(copy.deepcopy(neighbor.model.state_dict()))
+        vicinity_weights = average_weights(vicinity_weights)
+        weight_updates[node] = vicinity_weights
+    
+    #Update vicinity weights
+    for node,weight in weight_updates.items():
+        node.model.load_state_dict(weight)
