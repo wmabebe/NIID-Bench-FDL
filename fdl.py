@@ -76,6 +76,7 @@ if __name__ == '__main__':
     mkdirs(args.logdir)
     mkdirs(args.modeldir)
 
+    #Extract user arguments
     NODES = args.n_parties
     MAX_PEERS = NODES - 1 if args.topology == "complete" else math.ceil(math.log(NODES,2))
     SIM_MATRIX = {i:{j: 0 if i == j else None for j in range(NODES)} for i in range(NODES)}
@@ -98,7 +99,7 @@ if __name__ == '__main__':
     os.makedirs(os.path.dirname(args.logdir), exist_ok=True)
 
     
-
+    #Create log files
     if args.log_file_name is None:
         argument_path='experiment_arguments-%s.json' % datetime.datetime.now().strftime("%Y-%m-%d-%H:%M-%S")
     else:

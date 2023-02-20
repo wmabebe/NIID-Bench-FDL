@@ -43,17 +43,37 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 def download_and_unzip(url, extract_to='.'):
+    """Download and unzip a file.
+
+    Args:
+        url (string): URL of the zip file.
+        extract_to (str, optional): Output directory. Defaults to '.'.
+    """
     http_response = urlopen(url)
     zipfile = ZipFile(BytesIO(http_response.read()))
     zipfile.extractall(path=extract_to)
 
+#Create a directory given a path
 def mkdirs(dirpath):
+    """Create a directory.
+
+    Args:
+        dirpath (string): The path of the directory to be created.
+    """
     try:
         os.makedirs(dirpath)
     except Exception as _:
         pass
 
 def load_mnist_data(datadir):
+    """Load MNIST data.
+
+    Args:
+        datadir (string): MNIST data directory.
+
+    Returns:
+        tuple: Train and test data and labels.
+    """
 
     transform = transforms.Compose([transforms.ToTensor()])
 
@@ -71,6 +91,14 @@ def load_mnist_data(datadir):
     return (X_train, y_train, X_test, y_test)
 
 def load_fmnist_data(datadir):
+    """Load FMNIST data.
+
+    Args:
+        datadir (string): FMNIST data directory.
+
+    Returns:
+        tuple: Train and test data and labels.
+    """
 
     transform = transforms.Compose([transforms.ToTensor()])
 
@@ -88,6 +116,14 @@ def load_fmnist_data(datadir):
     return (X_train, y_train, X_test, y_test)
 
 def load_svhn_data(datadir):
+    """Load SVHN data.
+
+    Args:
+        datadir (string): SVHN data directory.
+
+    Returns:
+        tuple: Train and test data and labels.
+    """
 
     transform = transforms.Compose([transforms.ToTensor()])
 
@@ -106,6 +142,14 @@ def load_svhn_data(datadir):
 
 
 def load_cifar10_data(datadir):
+    """Load CIFAR-10 data.
+
+    Args:
+        datadir (string): CIFAR-10 data directory.
+
+    Returns:
+        tuple: Train and test data and labels.
+    """
 
     transform = transforms.Compose([transforms.ToTensor()])
 
@@ -121,6 +165,14 @@ def load_cifar10_data(datadir):
     return (X_train, y_train, X_test, y_test)
 
 def load_celeba_data(datadir):
+    """Load CELEBA data.
+
+    Args:
+        datadir (string): CELEBA data directory.
+
+    Returns:
+        tuple: Train and test data and labels.
+    """
 
     transform = transforms.Compose([transforms.ToTensor()])
 
@@ -137,6 +189,15 @@ def load_celeba_data(datadir):
     return (None, y_train, None, y_test)
 
 def load_femnist_data(datadir):
+    """Load FEMNIST data.
+
+    Args:
+        datadir (string): FEMNIST data directory.
+
+    Returns:
+        tuple: Train and test data and labels.
+    """
+
     transform = transforms.Compose([transforms.ToTensor()])
 
     mnist_train_ds = FEMNIST(datadir, train=True, transform=transform, download=True)
@@ -156,6 +217,15 @@ def load_femnist_data(datadir):
 
 
 def load_cifar100_data(datadir):
+    """Load CIFAR-100 data.
+
+    Args:
+        datadir (string): CIFAR-100 data directory.
+
+    Returns:
+        tuple: Train and test data and labels.
+    """
+
     transform = transforms.Compose([transforms.ToTensor()])
 
     cifar100_train_ds = CIFAR100_truncated(datadir, train=True, download=True, transform=transform)
@@ -171,6 +241,14 @@ def load_cifar100_data(datadir):
 
 
 def load_tinyimagenet_data(datadir):
+    """Load TinyImagenet data.
+
+    Args:
+        datadir (string): TinyImagenet data directory.
+
+    Returns:
+        tuple: Train and test data and labels.
+    """
     transform = transforms.Compose([transforms.ToTensor()])
     xray_train_ds = ImageFolder_custom(datadir+'tiny-imagenet-200/train/', transform=transform)
     xray_test_ds = ImageFolder_custom(datadir+'tiny-imagenet-200/val/', transform=transform)
@@ -182,6 +260,16 @@ def load_tinyimagenet_data(datadir):
 
 
 def record_net_data_stats(y_train, net_dataidx_map, logdir):
+    """_summary_
+
+    Args:
+        y_train (nparray): Train labels.
+        net_dataidx_map (dict): Dictionary containing client:data-indices mapping.
+        logdir (string): Output directory.
+
+    Returns:
+        dict: Dictionary containing client:class-counts mapping
+    """
 
     net_cls_counts = {}
 
@@ -195,9 +283,20 @@ def record_net_data_stats(y_train, net_dataidx_map, logdir):
     return net_cls_counts
 
 def partition_data(dataset, datadir, logdir, partition, n_parties, beta=0.4):
-    #np.random.seed(2020)
-    #torch.manual_seed(2020)
+    """This method partitions the dataset and divides it amongst the clients.
 
+    Args:
+        dataset (string): Dataset name.
+        datadir (string): Directory where the dataset is located.
+        logdir (string): Output directory.
+        partition (string): How to partition the dataset.
+        n_parties (int): Number of participating clients.
+        beta (float, optional): Concentration parameter for distribution based labe skew. Defaults to 0.4.
+
+    Returns:
+        tuple: Containing train and test data as well as client:data-indices 
+        dictionary and client:class-counts dictionary.
+    """
     if dataset == 'mnist':
         X_train, y_train, X_test, y_test = load_mnist_data(datadir)
     elif dataset == 'fmnist':
@@ -514,7 +613,14 @@ def partition_data(dataset, datadir, logdir, partition, n_parties, beta=0.4):
 
 
 def get_trainable_parameters(net):
-    'return trainable parameter values as a vector (only the first parameter set)'
+    """Return trainable parameter values as a vector (only the first parameter set).
+
+    Args:
+        net (torch.nn): Pytorch model.
+
+    Returns:
+        torch.array: Trainable network values.
+    """
     trainable=filter(lambda p: p.requires_grad, net.parameters())
     # logger.info("net.parameter.data:", list(net.parameters()))
     paramlist=list(trainable)
@@ -535,7 +641,12 @@ def get_trainable_parameters(net):
 
 
 def put_trainable_parameters(net,X):
-    'replace trainable parameter values by the given vector (only the first parameter set)'
+    """Replace trainable parameter values by the given vector (only the first parameter set).
+
+    Args:
+        net (torch.nn): Pytorch model.
+        X (torch.array): Network parameters.
+    """
     trainable=filter(lambda p: p.requires_grad, net.parameters())
     paramlist=list(trainable)
     offset=0
@@ -546,6 +657,17 @@ def put_trainable_parameters(net,X):
         offset+=numel
 
 def compute_accuracy(model, dataloader, get_confusion_matrix=False, device="cpu"):
+    """Compute the accuracy of a model on a given dataset.
+
+    Args:
+        model (torch.nn): The Pytorch model.
+        dataloader (torch.utils.data.DataLoader): Data loader of the dataset used for compting accuracy
+        get_confusion_matrix (bool, optional): Generate confustion matrix. Defaults to False.
+        device (str, optional): CPU or GPU. Defaults to "cpu".
+
+    Returns:
+        int: Accuracy of the model
+    """
 
     was_training = False
     if model.training:
@@ -590,13 +712,29 @@ def compute_accuracy(model, dataloader, get_confusion_matrix=False, device="cpu"
 
 
 def save_model(model, model_index, args):
+    """Save model to file.
+
+    Args:
+        model (torch.nn): Model to be saved.
+        model_index (int): Client id that owns the current model.
+        args (dict): Dictionary of user defined arguments.
+    """
     logger.info("saving local model-{}".format(model_index))
     with open(args.modeldir+"trained_local_model"+str(model_index), "wb") as f_:
         torch.save(model.state_dict(), f_)
     return
 
 def load_model(model, model_index, device="cpu"):
-    #
+    """Load model from file.
+
+    Args:
+        model (torch.nn): Model to be loaded.
+        model_index (int): Client id that owns the current model.
+        device (str, optional): CPU or GPU. Defaults to "cpu".
+
+    Returns:
+        torch.nn: Loaded model.
+    """
     with open("trained_local_model"+str(model_index), "rb") as f_:
         model.load_state_dict(torch.load(f_))
     model.to(device)
@@ -630,6 +768,17 @@ class AddGaussianNoise(object):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
 def get_val_dataloader(dataset, datadir, datasize, val_bs):
+    """Load validation data for the proxy similarity computation.
+
+    Args:
+        dataset (string): Name of the global dataset.
+        datadir (string): Location of the global dataset.
+        datasize (int): Number of samples to be drawn from the dataset.
+        val_bs (int): Batch size for the data loader.
+
+    Returns:
+        torch.utils.data.DataLoader: Data loader for the validation data.
+    """
     val_dl = None
     if dataset == 'tinyimagenet':
         if not os.path.exists('./data/tiny-imagenet-200'):
@@ -689,6 +838,21 @@ def get_val_dataloader(dataset, datadir, datasize, val_bs):
 
 
 def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None, noise_level=0, net_id=None, total=0):
+    """Generate train and test data loaders.
+
+    Args:
+        dataset (string): Dataset to be loaded.
+        datadir (string): path to dataset.
+        train_bs (int): Train data batch size.
+        test_bs (int): Test data batch size.
+        dataidxs (dict, optional): client:data-indeces. Defaults to None.
+        noise_level (int, optional): Gaussian noise level. Defaults to 0.
+        net_id (_type_, optional): Client id. Defaults to None.
+        total (int, optional): _description_. Defaults to 0.
+
+    Returns:
+        tuple: Train and test dataloaders.
+    """
     if dataset in ('mnist', 'femnist', 'fmnist', 'cifar10','cifar100', 'svhn', 'generated', 'covtype', 'a9a', 'rcv1', 'SUSY','tinyimagenet'):
         if dataset == 'mnist':
             dl_obj = MNIST_truncated
@@ -818,8 +982,10 @@ def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None, noise_lev
 
 
 def weights_init(m):
-    """
-    Initialise weights of the model.
+    """Model wieght initializer.
+
+    Args:
+        m (torch.nn): Model.
     """
     if(type(m) == nn.ConvTranspose2d or type(m) == nn.Conv2d):
         nn.init.normal_(m.weight.data, 0.0, 0.02)
@@ -828,9 +994,7 @@ def weights_init(m):
         nn.init.constant_(m.bias.data, 0)
 
 class NormalNLLLoss:
-    """
-    Calculate the negative log likelihood
-    of normal distribution.
+    """Calculate the negative log likelihood of normal distribution.
     This needs to be minimised.
 
     Treating Q(cj | x) as a factored Gaussian.
@@ -844,17 +1008,19 @@ class NormalNLLLoss:
 
 
 def noise_sample(choice, n_dis_c, dis_c_dim, n_con_c, n_z, batch_size, device):
-    """
-    Sample random noise vector for training.
+    """Sample random noise vector for training.
 
-    INPUT
-    --------
-    n_dis_c : Number of discrete latent code.
-    dis_c_dim : Dimension of discrete latent code.
-    n_con_c : Number of continuous latent code.
-    n_z : Dimension of iicompressible noise.
-    batch_size : Batch Size
-    device : GPU/CPU
+    Args:
+        choice (_type_): _description_
+        n_dis_c (_type_): Number of discrete latent code.
+        dis_c_dim (_type_): Dimension of discrete latent code.
+        n_con_c (_type_): Number of continuous latent code.
+        n_z (_type_): Dimension of iicompressible noise.
+        batch_size (_type_): Batch size.
+        device (string): CPU or GPU.
+
+    Returns:
+        torch.ndarray: _description_
     """
 
     z = torch.randn(batch_size, n_z, 1, 1, device=device)
@@ -887,6 +1053,14 @@ def noise_sample(choice, n_dis_c, dis_c_dim, n_con_c, n_z, batch_size, device):
 
 #Flatten all layers of a gradient
 def flatten_layers(gradient):
+    """Flatten aand concatenate gradients from all layers of a model.
+
+    Args:
+        gradient (dict): Dictionary containing gradients.
+
+    Returns:
+        np.array: Flattened gradients.
+    """
     X_flat = np.array([])
     for name,layer in sorted(gradient.items()):
         cur = np.array(layer,dtype=np.float64).flatten()
@@ -895,6 +1069,15 @@ def flatten_layers(gradient):
 
 #Calculate the radians between two gradients
 def get_radians(g1,g2):
+    """Compute radian between two gradients.
+
+    Args:
+        g1 (np.array): Gradient A.
+        g2 (np.array): Gradient B.
+
+    Returns:
+        float: Radian between two gradients.
+    """
     unit_vector_1 = g1 / np.linalg.norm(g1) if np.linalg.norm(g1) != 0 else 0
     unit_vector_2 = g2 / np.linalg.norm(g2) if np.linalg.norm(g2) != 0 else 0
     dot_product = np.dot(unit_vector_1, unit_vector_2)
@@ -903,6 +1086,11 @@ def get_radians(g1,g2):
 
 #BFTM methods
 def show(matrix):
+    """Display the similarity matrix.
+
+    Args:
+        matrix (list): 2-D similarity matrix.
+    """
     print("",end="  ")
     for k in sorted(matrix.keys()):
         print(k,end="  ")
@@ -915,6 +1103,14 @@ def show(matrix):
         
 
 def size(matrix):
+    """Return the number of non None values in the matrix.
+
+    Args:
+        matrix (list): 2-D similarity matrix.
+
+    Returns:
+        int: Count of non None values in matrix.
+    """
     size = 0
     for _,row in matrix.items():
         #size += len([r for r in row.values() if r != None])
@@ -924,15 +1120,46 @@ def size(matrix):
     return size
 
 def is_complete(matrix,size):
+    """Check whether the matrix is completely populated.
+
+    Args:
+        matrix (list): 2-D similarity matrix.
+        size (int): Length of the 2-D similarity matrix.
+
+    Returns:
+        Boolean: True if the matrix is complete.
+    """
     for _,row in matrix.items():
         if len(row) < size:
             return False
     return True
 
 def exists(matrix,i,j):
+    """Check if matrix value j exists in row i.
+    This is used to determine if node j has similarity computed with node i.
+
+    Args:
+        matrix (list): 2-D similarity matrix.
+        i (int): Matrix row.
+        j (int): Value to locate.
+
+    Returns:
+        int: True if j and i have similarity computed.
+    """
     return j in matrix[i].keys()
 
 def intersection(matrix,n1,n2):
+    """Collect overlap of encounter between two nodes.
+    Encounters are nodes whoose similarity value has been computed.
+
+    Args:
+        matrix (list): 2-D node to node matrix.
+        n1 (Node): Node one.
+        n2 (Node): Node two.
+
+    Returns:
+        list: Return intersection.
+    """
     inter = []
     for n,v in matrix[n1.id].items():
         if v == None and matrix[n2.id][n] == None:
@@ -940,6 +1167,14 @@ def intersection(matrix,n1,n2):
     return inter
 
 def add_entry(matrix,i,j,replace=False):
+    """Add entry to matrix.
+
+    Args:
+        matrix (list): 2-D similarity matrix.
+        i (Node): Node one.
+        j (Node): Node two.
+        replace (bool, optional): Replace previous value of true. Defaults to False.
+    """
     if j not in matrix[i].keys():
         matrix[i][j] = abs(i - j)
     else:
@@ -947,6 +1182,16 @@ def add_entry(matrix,i,j,replace=False):
             matrix[i][j] = abs(i - j)
 
 def get_preds(model, dataloader, device="cpu"):
+    """Compute prediction on dataset.
+
+    Args:
+        model (torch.nn.Module): Model.
+        dataloader (DataLoader): Dataset data loader.
+        device (str, optional): CPU or GPU. Defaults to "cpu".
+
+    Returns:
+        list: Predictions on dataset.
+    """
 
     was_training = False
     if model.training:
@@ -978,6 +1223,21 @@ def get_preds(model, dataloader, device="cpu"):
 
 
 def kl_divergence(id1,id2,m1,m2,cache_val_preds,val_dl,device="cpu"):
+    """Compute the KL-divergence between a pair of predictions by
+    a pair of models.
+
+    Args:
+        id1 (int): Node one id.
+        id2 (int): Node two id.
+        m1 (torch.nn.Module): Model one.
+        m2 (torch.nn.Module): Model two.
+        cache_val_preds (dict): Cached predictions
+        val_dl (DataLoader): Validation dataset data loader.
+        device (str, optional): CPU or GPU. Defaults to "cpu".
+
+    Returns:
+        float: KL-divergence between two predictions.
+    """
     if m1 == m2:
         return 0
     
@@ -997,6 +1257,15 @@ def kl_divergence(id1,id2,m1,m2,cache_val_preds,val_dl,device="cpu"):
     return result
 
 def get_signed_radians(grad1,grad2):
+    """Compute signed radians between two gradients.
+
+    Args:
+        grad1 (np.ndarray): Gradient one.
+        grad2 (np.ndarray): Gradient two.
+
+    Returns:
+        float: Signed angle.
+    """
     g1 = flatten_layers(grad1)
     g2 = flatten_layers(grad2)
     if np.array_equal(g1, g2):
@@ -1012,6 +1281,18 @@ def get_signed_radians(grad1,grad2):
 
 
 def update_matrix(G,M,C,cache_val_preds,adj_list,sim="grad",val_dl=None, device="cpu"):
+    """Update similarity matrix.
+
+    Args:
+        G (nx.graph): DL graph.
+        M (list): 2-D similarity matrix.
+        C (dict): Node encounter cache contains the ids of previously encountered nodes.
+        cache_val_preds (dict): Cached prediction outputs on the val dataset.
+        adj_list (list): DL adjacency list.
+        sim (str, optional): How to compare the nodes, kl-divergence or gradient similarity. Defaults to "grad".
+        val_dl (_type_, optional): Validation dataset data loader. Defaults to None.
+        device (str, optional): CPU or GPU. Defaults to "cpu".
+    """
     for node,adj in G.adj.items():
         for _1_hop,_ in adj.items():
             if sim == "grad":
@@ -1037,6 +1318,17 @@ def update_matrix(G,M,C,cache_val_preds,adj_list,sim="grad",val_dl=None, device=
             
 
 def BFTM(G,M,C,degree):
+    """Breadth-First-Topology-Morphing method.
+
+    Args:
+        G (nx.graph): DL graph.
+        M (list): Similarity matrix.
+        C (dict): Node encounter cache.
+        degree (int): Degree of the graph. (Max number of edges for a node)
+
+    Returns:
+        nx.graph: DL training graph.
+    """
     #show(M)
     subset = [n for n in list(G.nodes) if None in M[n.id].values()]
     print("Subset size: ",len(subset))
@@ -1082,12 +1374,32 @@ def BFTM(G,M,C,degree):
     return GN
 
 def is_empty(clusters):
+    """Check if empty cluster exists.
+
+    Args:
+        clusters (list): List of clusters.
+
+    Returns:
+        bool: True if empty cluster exists.
+    """
     for _,cluster in clusters.items():
         if len(cluster) > 0:
             return False
     return True
 
 def greedy_cliques(cliques,clusters,matrix):
+    """Construct a final topology using greedy search.
+    The greedy search is used to select nodes that form
+    a clique.
+
+    Args:
+        cliques (list): List of cliques.
+        clusters (list): List of clusters.
+        matrix (list): 2-D similarity matrix.
+
+    Returns:
+        list: Cliques.
+    """
     if len(clusters) == 0:
         return cliques
     cid = random.choice(range(len(clusters)))
@@ -1114,6 +1426,18 @@ def greedy_cliques(cliques,clusters,matrix):
     return greedy_cliques(cliques,clusters,matrix)
 
 def pcc_clique(clusters,strategy, labels, cut=0, matrix=None):
+    """Construct as many cliques as there are clusters.
+
+    Args:
+        clusters (list): List of clusters each containing nodes.
+        strategy (string): Strategy on how to construct the topology.
+        labels (list): The cluster information for each node.
+        cut (int, optional): Number of partitions in the topology. Defaults to 0 means just one partition.
+        matrix (list, optional): Similarity matrix. Defaults to None.
+
+    Returns:
+        nx.graph: DL topology.
+    """
     G = nx.Graph()
     cliques = []
     size = len(clusters)
@@ -1151,6 +1475,17 @@ def pcc_clique(clusters,strategy, labels, cut=0, matrix=None):
 
 
 def sampled_clique(clusters,strategy):
+    """Create a single clique by selecting nodes from
+    only one cluster when strategy=rand, or selecting
+    one node from each cluster when strategy=optim.
+
+    Args:
+        clusters (list): List of clusters containing nodes.
+        strategy (string): How to form the clique.
+
+    Returns:
+        nx.graph: DL topology.
+    """
     G = nx.Graph()
     sample = []
     #Sample 'size' nodes from a single cluster
@@ -1186,11 +1521,29 @@ def clique_the_cliques(cliques,labels,G):
                     break
 
 def get_partitions(cliques,cut=1):
+    """Split cliques into 'cut' partitions.
+
+    Args:
+        cliques (list): List of cliques.
+        cut (int, optional): Number of partitions. Defaults to 1.
+
+    Returns:
+        list: List of partitions.
+    """
     cliques.sort(key=len)
     k, m = divmod(len(cliques), cut)
     return list(cliques[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(cut))
 
 def cliques_on_ring(cliques,labels,G, cut=0):
+    """Connect cliques in a ring structure to create
+    a ring of cliques topology.
+
+    Args:
+        cliques (list): List of cliques.
+        labels (list): Node labels indicating to which cluster they belong.
+        G (nx.partition): DL graph.
+        cut (int, optional): Number of partitions. Defaults to 0 meaning only 1 partition.
+    """
     print("cliques_on_ring CUT:", cut)
     #if partitions
     if cut > 1:
@@ -1223,6 +1576,15 @@ def cliques_on_ring(cliques,labels,G, cut=0):
         G.add_edge(n1,n2)
 
 def manual_cliques(adj_list,cliques):
+    """Create DL graph given adjacency list and cliques.
+
+    Args:
+        adj_list (list): Adjacency list of nodes.
+        cliques (list): List of cliques.
+
+    Returns:
+        nx.graph: DL graph.
+    """
     G = nx.Graph()
     for clique in cliques:
         for n1 in clique:
@@ -1244,9 +1606,21 @@ def manual_cliques(adj_list,cliques):
     return G
 
 def m_cliques(adj_list,labels,matrix,topology="clique",cut=0):
+    """Given nodes and the clusters to which they are assigned,
+    construct a DL graph madeup of cliques.
+
+    Args:
+        adj_list (list): Adjacency list of DL nodes.
+        labels (list): Labeled clusters.
+        matrix (list): Similarity matrix.
+        topology (str, optional): Type of topology to create. Defaults to "clique".
+        cut (int, optional): Number of partitions in the DL graph. Defaults to 0 which means no cuts i.e. single partition.
+
+    Returns:
+        nx.graph: DL topology.
+    """
     num_clusters = list(np.unique(labels))
     clusters = {i:[] for i in num_clusters}
-    hood = {n.id:[i for i in num_clusters if i != labels[n.id]] for n in adj_list}
     print("m_cliques CUT:", cut)
     #Add nodes to clusters
     for idx,n in enumerate(adj_list):
@@ -1297,6 +1671,15 @@ def m_cliques(adj_list,labels,matrix,topology="clique",cut=0):
     return G_cliques
     
 def BFTM_(adj_list,labels):
+    """Experimental BFTM for tree topology.
+
+    Args:
+        adj_list (dict): DL graph adjacency list.
+        labels (np.array): The cluster labels for each client.
+
+    Returns:
+        nx.graph: DL network graph.
+    """
     G_prime = nx.Graph()
     num_clusters = list(np.unique(labels))
     clusters = {i:[] for i in num_clusters}
@@ -1348,6 +1731,17 @@ def BFTM_(adj_list,labels):
 
 
 def init_nets(net_configs, dropout_p, n_parties, args):
+    """Initialize network
+
+    Args:
+        net_configs (_type_): _description_
+        dropout_p (float): Dropout ratio.
+        n_parties (int): Number of clients.
+        args (dict): User options.
+
+    Returns:
+        tuple: models, model_meta_data, layer_type
+    """
 
     nets = {net_i: None for net_i in range(n_parties)}
 
@@ -1429,6 +1823,24 @@ def init_nets(net_configs, dropout_p, n_parties, args):
 
 
 def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_optimizer, sched, device="cpu",stash=False,accuracy=True):
+    """Train single model.
+
+    Args:
+        net_id (int): Client id.
+        net (torch.Module): Client model.
+        train_dataloader (DataLoader): Train dataset data loader.
+        test_dataloader (DataLoader): Test dataset data loader.
+        epochs (int): Number of training epochs.
+        lr (float): Learning rate.
+        args_optimizer (dict): User options.
+        sched (Bool): Use schedular if set to True.
+        device (str, optional): CPU or GPU. Defaults to "cpu".
+        stash (bool, optional): Stash last layer gradients if set to True. Defaults to False.
+        accuracy (bool, optional): Compute local accuracy if set to True. Defaults to True.
+
+    Returns:
+        tuple: Train and Test accuracy.
+    """
     logger.info('Training network %s' % str(net_id))
     train_acc, test_acc = None, None
     if accuracy:
@@ -1515,12 +1927,28 @@ def train_net(net_id, net, train_dataloader, test_dataloader, epochs, lr, args_o
 
 
 def view_image(train_dataloader):
+    """View single image in train dataset.
+
+    Args:
+        train_dataloader (DataLoader): Train data loader.
+    """
     for (x, target) in train_dataloader:
         np.save("img.npy", x)
         print(x.shape)
         exit(0)
 
 def local_pre_training(nets, selected, args, net_dataidx_map, pre_epochs, test_dl = None, device="cpu"):
+    """Perform prologue training.
+
+    Args:
+        nets (dict): Total list of models to train.
+        selected (list): List of selected models.
+        args (dict): User options.
+        net_dataidx_map (dict): Client:data-indices map.
+        pre_epochs (int): Number of training epochs.
+        test_dl (DataLoader, optional): Test data loader. Defaults to None.
+        device (str, optional): CPU or GPU. Defaults to "cpu".
+    """
     for net_id, net in nets.items():
         if net_id not in selected:
             continue
@@ -1547,6 +1975,19 @@ def local_pre_training(nets, selected, args, net_dataidx_map, pre_epochs, test_d
         _, _ = train_net(net_id, net, train_dl_local, test_dl, pre_epochs, args.lr, args.optimizer, sched, device=device, stash=args.similarity == "grad",accuracy=args.local_acc)
 
 def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, device="cpu"):
+    """Peform model updates for the clients in the DL network.
+
+    Args:
+        nets (dict): Clients networks.
+        selected (list): List of currently selected models.
+        args (dict): User options.
+        net_dataidx_map (dict): Client:data-indices map.
+        test_dl (DataLoader, optional): Test data loader. Defaults to None.
+        device (str, optional): CPU or GPU. Defaults to "cpu".
+
+    Returns:
+        tuple: models, average train accuracy, average test accuracy
+    """
     avg_acc, avg_train_acc = None, None
     if args.local_acc:
         avg_acc = 0.0
@@ -1593,8 +2034,21 @@ def local_train_net(nets, selected, args, net_dataidx_map, test_dl = None, devic
     nets_list = list(nets.values())
     return nets_list, avg_train_acc, avg_acc
 
-#This method returns a dictionary with node_id keys and a list of data_id indexes
 def get_partition_dict(dataset, partition, n_parties, init_seed=0, datadir='./data', logdir='./logs', beta=0.5):
+    """This method returns a dictionary with node_id keys and a list of data_id indexes.
+
+    Args:
+        dataset (string): Dataset name.
+        partition (string): Parrtition type.
+        n_parties (int): Number of clients.
+        init_seed (int, optional): Random seed. Defaults to 0.
+        datadir (str, optional): Dataset path. Defaults to './data'.
+        logdir (str, optional): Output directory path. Defaults to './logs'.
+        beta (float, optional): Non-IID concentration parameter. Defaults to 0.5.
+
+    Returns:
+        dict: Client:data-indices map.
+    """
     seed = init_seed
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -1605,6 +2059,14 @@ def get_partition_dict(dataset, partition, n_parties, init_seed=0, datadir='./da
     return net_dataidx_map
 
 def average_gradients(grads):
+    """Average model gradients.
+
+    Args:
+        grads (list): List of model gradients.
+
+    Returns:
+        list: Averaged gradients.
+    """
     avg_grad = copy.deepcopy(grads[0])
     for idx,grad in enumerate(grads):
         if idx >= 1:
@@ -1615,9 +2077,14 @@ def average_gradients(grads):
     return avg_grad
 
 #This method averages weights in w list
-def average_weights(w,weights=None):
-    """
-    Returns the average of the weights.
+def average_weights(w):
+    """Returns the average of the weights.
+
+    Args:
+        w (torch.nn.Module): Model weights.
+
+    Returns:
+        torch.nn.Module: Averaged weight.
     """
     w_avg = copy.deepcopy(w[0])
     for key in w_avg.keys():
@@ -1626,9 +2093,13 @@ def average_weights(w,weights=None):
         w_avg[key] = torch.div(w_avg[key], len(w))
     return w_avg
 
-#Ripple updates with 1-hop neighbors
 def ripple_updates(G):
-    #Compute vicinity weights for all nodes
+    """Ripple updates with 1-hop neighbors. 
+    Compute vicinity weights for all nodes in graph G.
+
+    Args:
+        G (nx.graph): Peer graph
+    """
     weight_updates = {n:None for n in list(G.nodes)}
     for node in list(G.nodes):
         vicinity_weights = [copy.deepcopy(node.model.state_dict())]
