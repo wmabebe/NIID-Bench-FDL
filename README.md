@@ -1,5 +1,7 @@
 # NIID-Bench-FDL
+
 <a href="https://zenodo.org/badge/latestdoi/499340677"><img src="https://zenodo.org/badge/499340677.svg" alt="DOI"></a>
+
 This repository clonned and transformed the <a href="https://github.com/Xtra-Computing/NIID-Bench">NIID-Bench </a> repository.
 Here is the original paper on Non-IID FL [Federated Learning on Non-IID Data Silos: An Experimental Study](https://arxiv.org/pdf/2102.02079.pdf).
 
@@ -26,7 +28,7 @@ Here is one example to run this code:
 python fdl.py --model=simple-cnn \
     --dataset=mnist \
     --lr=0.01 \
-    --batch-size=64 \
+    --batch_size=64 \
     --epochs=10 \
     --n_parties=128 \
     --mu=0.01 \
@@ -123,6 +125,30 @@ experiemnts, the `n_parties` argument is set to the `n` value. While the `m` val
 | L             |  >>            | >>         | mixed `beta`=0.5,`noise`=0.3  |  >>          |   22/24        | +2.86%      |
 
 
+## Outputs
+ The main experiment outputs will be saved under a
+“/logs” subdirectory. All experiment runs will be output-ed
+to a timestamped directory. The directory name will contain
+most of the hyper-parameters used in the experiment. This
+way it will be easy to navigate to the outputs later on. The
+output directories will contain 3 or 4 files. These include 2 log
+files with “.json” and “.log” extension. The “.log” extension
+will contain data split statistic, loss and accuracy outputs for
+each peer and each round. The “.json” output is not necessary.
+Depending on the command you run, you will get 1 or 2 “.png”
+files. The first one, “graph.png” will show the topology of
+the final training graph. Most cases will have an additional
+“kmeans.png” file that shows the unsupervised classification
+of the similarity matrix.
+    
+.
+├── ...
+├── logs                    # Output folder
+│   ├── experiments.json          # Ignore
+│   ├── experiments.log           # Contains the node data distribution, accuracy logs
+│   ├── graph.png                 # DL topolgy
+│   └── kmeans.png                # Kmeans output visualized in 2D
+└── ...
 
 
 
