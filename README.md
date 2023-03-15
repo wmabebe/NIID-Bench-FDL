@@ -141,14 +141,14 @@ the final training graph. Most cases will have an additional
 “kmeans.png” file that shows the unsupervised classification
 of the similarity matrix.
     
-.
-├── ...
-├── logs                    # Output folder
-│   ├── experiments.json          # Ignore
-│   ├── experiments.log           # Contains the node data distribution, accuracy logs
-│   ├── graph.png                 # DL topolgy
-│   └── kmeans.png                # Kmeans output visualized in 2D
-└── ...
+. <br />
+├── ... <br />
+├── logs                    # Output folder <br />
+│   ├── experiments.json          # Ignore <br />
+│   ├── experiments.log           # Contains the node data distribution, accuracy logs <br />
+│   ├── graph.png                 # DL topolgy <br />
+│   └── kmeans.png                # Kmeans output visualized in 2D <br />
+└── ... <br />
 
 
 
