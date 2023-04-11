@@ -29,6 +29,7 @@ from vggmodel import *
 from resnetcifar import *
 from node import *
 from resnet import *
+from dlrl.dlrl import gen_cliques
 
 
 def get_args():
@@ -63,9 +64,9 @@ def get_args():
     parser.add_argument('--rho', type=float, default=0, help='Parameter controlling the momentum SGD')
     parser.add_argument('--local_acc', type=int, default=1, help='Enable local accuracy collection [0,1]')
     parser.add_argument('--sample', type=float, default=1, help='Sample ratio for each communication round')
-    parser.add_argument('--topology',type=str, default="tree", help='Node graph topology default=tree, options (ring, clique)')
-    parser.add_argument('--strategy',type=str, default="rand", help='Clumping strategy default=rand, options (optim)')
-    parser.add_argument('--similarity',type=str, default="grad", help='Similarity computation default=grad, options (kl)')
+    parser.add_argument('--topology',type=str, default="pcc", help='Node graph topology default=pcc, options (ring, clique, tree)')
+    parser.add_argument('--strategy',type=str, default="rand", help='Clumping strategy default=rand, options (optim,greedy,RL)')
+    parser.add_argument('--similarity',type=str, default="kl", help='Similarity computation default=kl, options (grad))') #TODO: emd similarity
     parser.add_argument('--cut',type=int, default=0, help='Number of cuts in final graph')
     args = parser.parse_args()
     return args
@@ -244,8 +245,10 @@ if __name__ == '__main__':
         for _,row1 in sorted(SIM_MATRIX.items()):
             temp = []
             for val,row2 in sorted(row1.items()):
-                temp.append(row2)
+                temp.append(float(row2))
             matrix.append(temp)
+        
+        logger.info("SIM MATRIX: %s", matrix)
 
         #print(matrix)
         matrix = np.array(matrix)
@@ -308,6 +311,9 @@ if __name__ == '__main__':
             #Here, local cliques are created via greedy construction from among kmeans clusters
             elif STRATEGY == "greedy":
                 G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX,"pcc_greedy",CUT)
+            elif STRATEGY == "RL": 
+                topo = gen_cliques(matrix,5)
+                G0 = manual_cliques(adj_list,topo)
             #The optim option creates locally heterogenous cliques
             #Here, local cliques are created via uniform sampling from among kmeans clusters
             else:

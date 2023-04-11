@@ -1241,18 +1241,18 @@ def kl_divergence(id1,id2,m1,m2,cache_val_preds,val_dl,device="cpu"):
     if m1 == m2:
         return 0
     
-    m1_preds = get_preds(m1,val_dl,device) if cache_val_preds[id1] == None else cache_val_preds[id1]
-    m2_preds = get_preds(m2,val_dl,device) if cache_val_preds[id2] == None else cache_val_preds[id2]
+    m1_preds = F.log_softmax(get_preds(m1,val_dl,device),dim=1) if cache_val_preds[id1] == None else cache_val_preds[id1]
+    m2_preds = F.log_softmax(get_preds(m2,val_dl,device),dim=1) if cache_val_preds[id2] == None else cache_val_preds[id2]
 
     cache_val_preds[id1] = m1_preds
     cache_val_preds[id2] = m2_preds
 
     print("PRED SHAPE:", m1_preds.shape)
 
-    kl_loss = nn.KLDivLoss(reduction="batchmean")
+    kl_loss = nn.KLDivLoss(reduction="batchmean",log_target=True)
 
     result = kl_loss(m1_preds, m2_preds)
-    print("\t",result)
+    print("\t",result,"dtype:",result.dtype)
 
     return result
 
