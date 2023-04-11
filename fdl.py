@@ -221,7 +221,7 @@ if __name__ == '__main__':
     
     # print("TOPOLOGY:",TOPOLOGY)
     
-    if TOPOLOGY not in ["complete","manual"]:
+    if TOPOLOGY not in ["complete"]:
         #Pretrain selected nodes to compute local gradients for 10 epochs
         arr = np.arange(args.n_parties)
         np.random.shuffle(arr)
@@ -318,6 +318,29 @@ if __name__ == '__main__':
             #Here, local cliques are created via uniform sampling from among kmeans clusters
             else:
                 G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX,"pcc_optim",CUT)
+            #We have added a manual topology option to go with a manual partition
+        #At the moment, this option is not yet programmable as it only considers 24 nodes
+        elif TOPOLOGY == "manual":
+            print("Manual topology!")
+            # The optim strategy creates locally heterogenous set of cliques
+            if STRATEGY == "optim":
+                topo = [[0,1,2,3,4],[5,6,7,8,9],[10,11,12,13,14],[15,16,17,18,19],[20,21,22,23]]
+                print("Optim topology!")
+                G0 = manual_cliques(adj_list,topo)
+            #The rand strategy creates cliques madeup of random nodes
+            elif STRATEGY == "rand":
+                topo = [i for i in range(24)]
+                random.shuffle(topo)
+                topo = np.array_split(topo,5)
+                G0 = manual_cliques(adj_list,topo)
+                print("Rand topology!")
+            #RL strategy creates cliques using the RL agent trained on graphs of degree 5
+            elif STRATEGY == "RL": 
+                topo = gen_cliques(matrix,5)
+                G0 = manual_cliques(adj_list,topo)
+                print("RL topology!")
+            # nx.draw(G0, with_labels = True)
+            # plt.savefig(args.logdir + "graph.png")
         elif TOPOLOGY == "sample":
             if STRATEGY == "rand":
                 G0 = m_cliques(adj_list,list(kmeans.labels_),SIM_MATRIX,"sample_rand")
@@ -332,24 +355,6 @@ if __name__ == '__main__':
                 G0 = m_cliques(adj_list,list(kmeans.labels_),"ring",SIM_MATRIX)
 
         nx.draw(G0,node_color=[kmeans.labels_[n.id]/len(kmeans.labels_) for n in list(G0.nodes)],with_labels = True)
-        plt.savefig(args.logdir + "graph.png")
-    
-    #We have added a manual topology option to go with a manual partition
-    #At the moment, this option is not yet programmable as it only considers 24 nodes
-    elif TOPOLOGY == "manual":
-        print("Manual topology!")
-        # The optim strategy creates locally heterogenous set of cliques
-        if STRATEGY == "optim":
-            topo = [[0,1,2,3,4],[5,6,7,8,9],[10,11,12,13,14],[15,16,17,18,19],[20,21,22,23]]
-            print("Optim topology!")
-        #The rand strategy creates cliques madeup of random nodes
-        elif STRATEGY == "rand":
-            topo = [i for i in range(24)]
-            random.shuffle(topo)
-            topo = np.array_split(topo,5)
-            print("Rand topology!")
-        G0 = manual_cliques(adj_list,topo)
-        nx.draw(G0, with_labels = True)
         plt.savefig(args.logdir + "graph.png")
     else:
         nx.draw(G0)
